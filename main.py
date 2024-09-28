@@ -64,7 +64,9 @@ class Math3D:
         return matA
 
 class main:
-    def __init__(self):
+    def __init__(self, h, w):
+        self.h = h
+        self.w = w
         self.viewpos = [0.0, 0.0, -10.0]
         self.rotation = [0.0, 0.0, 0.0]
         self.delta = 0.0
@@ -119,39 +121,22 @@ class main:
             return ((A * pt.x)+(B * pt.y)+D)/-C;
         }
         
-        uint4 texture_pixel(int2 pos, float4 p1, float4 p2, float4 p3, float4 P1, float4 P2, float4 P3, read_only image2d_t tex)
+        uint4 texture_pixel(int2 pos, int i, read_only image2d_t tex, __global float3 *mats)
         {
-            float3 mat1[3];
-            float3 mat2[3];
+            //printf("[%f|%f|%f|%f|%f|%f]/n",  mats[i][0], mats[i][1], mats[i][2], mats[i+1][0], mats[i+1][1], mats[i+1][2]);
+            //printf("%i", i);
             float3 mat3[3];
             float3 mat4[3];
             float3 mat5[3];
             float3 row;
             float det;
             float2 px = (float2)(convert_float(pos.x),convert_float(pos.y));
-            /*
-            p1.x p2.x p3.x
-            p1.y p2.y p3.y
-            1    1    1
-            */
-            row = (float3)((p2.y-p3.y), (p1.y-p3.y), (p1.y-p2.y));
-            det = 1/(p1.x*(p2.y-p3.y)-p2.x*(p1.y-p3.y)+p3.x*(p1.y-p2.y));
             
-            mat1[0] = (float3)((p2.y-p3.y)*det, -(p2.x-p3.x)*det, (p2.x*p3.y-p2.y*p3.x)*det);
-            mat1[1] = (float3)(-(p1.y-p3.y)*det, (p1.x-p3.x)*det, -(p1.x*p3.y-p3.x*p1.y)*det);
-            mat1[2] = (float3)((p1.y-p2.y)*det, -(p1.x-p2.x)*det, (p1.x*p2.y-p2.x*p1.y)*det);
+            mat3[0] = mats[i];
+            mat3[1] = mats[i+1];
+            mat3[2] = mats[i+2];
             
-            mat2[0] = (float3)(P1.x, P2.x, P3.x);
-            mat2[1] = (float3)(P1.y, P2.y, P3.y);
-            mat2[2] = (float3)(1, 1, 1);
-            
-            mat3[0] = (float3)(dot(mat2[0], (float3)(mat1[0].x, mat1[1].x, mat1[2].x)),
-                                dot(mat2[0], (float3)(mat1[0].y, mat1[1].y, mat1[2].y)),
-                                dot(mat2[0], (float3)(mat1[0].z, mat1[1].z, mat1[2].z)));
-            mat3[1] = (float3)(dot(mat2[1], (float3)(mat1[0].x, mat1[1].x, mat1[2].x)),
-                                dot(mat2[1], (float3)(mat1[0].y, mat1[1].y, mat1[2].y)),
-                                dot(mat2[1], (float3)(mat1[0].z, mat1[1].z, mat1[2].z)));
-            mat3[2] = (float3)(0,0,1);
+            //printf("[%f|%f|%f|%f|%f|%f]/n",  mat3[i][0], mat3[i][1], mat3[i][2], mat3[i+1][0], mat3[i+1][1], mat3[i+1][2]);
                                 
             mat4[0] = (float3)(px.x, 0, 1);
             mat4[1] = (float3)(px.y, 0, 1);
@@ -204,23 +189,69 @@ class main:
             out[gid] = (float4)(y, x, 0, points[gid].w);
         }
         
+        __kernel void make_mats(
+            __global const float4 *tris, __global const float4 *tex_coords, global float3 *mats
+        )
+        {
+            int i = get_global_id(0)*3;
+            float4 p1 = tris[i];
+            float4 p2 = tris[i+1];
+            float4 p3 = tris[i+2];
+            float4 P1 = tex_coords[i];
+            float4 P2 = tex_coords[i+1];
+            float4 P3 = tex_coords[i+2];
+            float3 mat1[3];
+            float3 mat2[3];
+            float3 row;
+            float det;
+            /*
+            p1.x p2.x p3.x
+            p1.y p2.y p3.y
+            1    1    1
+            */
+            row = (float3)((p2.y-p3.y), (p1.y-p3.y), (p1.y-p2.y));
+            det = 1/(p1.x*(p2.y-p3.y)-p2.x*(p1.y-p3.y)+p3.x*(p1.y-p2.y));
+            
+            mat1[0] = (float3)((p2.y-p3.y)*det, -(p2.x-p3.x)*det, (p2.x*p3.y-p2.y*p3.x)*det);
+            mat1[1] = (float3)(-(p1.y-p3.y)*det, (p1.x-p3.x)*det, -(p1.x*p3.y-p3.x*p1.y)*det);
+            mat1[2] = (float3)((p1.y-p2.y)*det, -(p1.x-p2.x)*det, (p1.x*p2.y-p2.x*p1.y)*det);
+            
+            mat2[0] = (float3)(P1.x, P2.x, P3.x);
+            mat2[1] = (float3)(P1.y, P2.y, P3.y);
+            mat2[2] = (float3)(1, 1, 1);
+            
+            mats[i] = (float3)(dot(mat2[0], (float3)(mat1[0].x, mat1[1].x, mat1[2].x)),
+                                dot(mat2[0], (float3)(mat1[0].y, mat1[1].y, mat1[2].y)),
+                                dot(mat2[0], (float3)(mat1[0].z, mat1[1].z, mat1[2].z)));
+            mats[i+1] = (float3)(dot(mat2[1], (float3)(mat1[0].x, mat1[1].x, mat1[2].x)),
+                                dot(mat2[1], (float3)(mat1[0].y, mat1[1].y, mat1[2].y)),
+                                dot(mat2[1], (float3)(mat1[0].z, mat1[1].z, mat1[2].z)));
+            mats[i+2] = (float3)(0,0,1);
+            //printf("%i", i);
+            //printf("[%f|%f|%f|%f|%f|%f|%f]",  mats[i][0], mats[i][1], mats[i][2], mats[i+1][0], mats[i+1][1], mats[i+1][2],i);
+        }
+        
         __kernel void draw_tris(
-            __global const float4 *tris, __global const float4 *tex_coords, uint pcount, __global const uint4 *colours, read_only image2d_t tex, write_only image2d_t screen)
+            __global const float4 *tris, __global const float4 *tex_coords, uint pcount, __global const uint4 *colours, __global float3 *mats, read_only image2d_t tex, write_only image2d_t screen)
             {
                 //float x = tris[0].w;
                 //printf("[%f]",  x);
                 const sampler_t sampler =  CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP_TO_EDGE | CLK_FILTER_NEAREST;
                 int2 pos = (int2)(get_global_id(0), get_global_id(1));
-                write_imageui(screen, pos, (uint4)(pos.x,pos.y,convert_int(tris[0].x),255));
+                write_imageui(screen, pos, (uint4)(255,255,255,255));//(uint4)(pos.x,pos.y,convert_int(tris[0].x),255));
                 float old_pixel_depth = 100000;
                 float test_pixel_depth;
                 for (int i = 0; i<pcount; i += 3)
                 {
-                    test_pixel_depth = pixel_depth(pos, tris[i], tris[i+1], tris[i+2]);
-                    if(point_in_triangle(pos, tris[i], tris[i+1], tris[i+2]) && test_pixel_depth < old_pixel_depth)
+                    
+                    if(point_in_triangle(pos, tris[i], tris[i+1], tris[i+2]))
                     {
-                        write_imageui(screen, pos, texture_pixel(pos, tris[i], tris[i+1], tris[i+2], tex_coords[i], tex_coords[i+1], tex_coords[i+2], tex));
-                        old_pixel_depth = test_pixel_depth;
+                        test_pixel_depth = pixel_depth(pos, tris[i], tris[i+1], tris[i+2]);
+                        if(test_pixel_depth < old_pixel_depth)
+                        {
+                            write_imageui(screen, pos, texture_pixel(pos, i, tex, mats));
+                            old_pixel_depth = test_pixel_depth;
+                        }
                     }
                 }
             }
@@ -276,10 +307,13 @@ class main:
         self.src = np.array(self.src_img)
         self.tex = cl.image_from_array(self.ctx, self.src, 4)
         
-        np_screen = np.array([[525, 350]], dtype=np.float32)
+        np_screen = np.array([[self.w, self.h]], dtype=np.float32)
 
         self.cl_screen = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_screen)
         self.cl_out = cl.Buffer(self.ctx, mf.WRITE_ONLY, self.np_points.nbytes)
+        
+        np_mats = np.array((len(vertices), 3), dtype=np.float32)
+        self.mats = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=np_mats)
         
         self.knl = self.prg.transform
         self.knl2 = self.prg.transform2
@@ -290,8 +324,8 @@ class main:
         self.delta = delta
         if self.clicking:
             rel_pos = [pygame.mouse.get_pos()[1] - self.start_click[1], pygame.mouse.get_pos()[0] - self.start_click[0]]
-            self.rotation[0] = -rel_pos[0] / 525
-            self.rotation[1] = -rel_pos[1] / 350
+            self.rotation[0] = -rel_pos[0] / self.w
+            self.rotation[1] = -rel_pos[1] / self.h
             
     def handle_input(self, events, pressed_keys):
         for event in events:
@@ -421,7 +455,7 @@ class main:
         for coord in tex_coords:
             self.texc.append([coord[0], coord[1],0,0])
         np_texc = np.array(self.texc, dtype=np.float32)
-        print(np_texc)
+        #print(np_texc)
         self.tex_coords = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_texc)
         
         for vert in self.np_points:
@@ -430,6 +464,9 @@ class main:
         for v in vertices:
             points.append((v[0], v[1], v[2], 1.0))
         self.np_points = np.array(points, dtype=np.float32)
+        print(self.np_points.shape)
+        np_mats = np.array((self.np_points.shape[0], 3), dtype=np.float32)
+        self.mats = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=np_mats)
         
         c = [(255, 100, 100, 255),
                    (255, 100, 100, 255),
@@ -478,7 +515,6 @@ class main:
         Math3D.translate(np_model, (1.0, 1.0, 1.0))
         np_model = Math3D.rotate(np_model, 10.0 * self.rotation[0], (1.0, 0.0, 0.0))
         np_model = Math3D.rotate(np_model, 10.0 * self.rotation[1], (0.0, 1.0, 0.0))
-        #print(np_model)
         
         view = np.eye(4, dtype=np.float32)
         Math3D.translate(view, (-self.viewpos[0], -self.viewpos[1], self.viewpos[2]))
@@ -493,50 +529,43 @@ class main:
         orth_proj[1][1] = 1 / top
         orth_proj[2][2] = -2 / (far - near)
         orth_proj[2][3] = -((far + near) / (far - near))
-        #print(orth_proj)
+        
         np_view = np.dot(orth_proj, view)
-        #print(np_view)
         
         mf = cl.mem_flags
         self.cl_points = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.np_points)
         self.cl_view = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_view)
         self.cl_model = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_model)
         self.cl_out = cl.Buffer(self.ctx, mf.READ_WRITE, self.np_points.nbytes)
-        
+
         self.knl(self.queue, (self.np_points.shape[0],1), None, self.cl_points, self.cl_model, self.cl_out)
-#         np_out = np.empty_like(self.np_points)
-#         cl.enqueue_copy(self.queue, np_out, self.cl_out)
-#         #print(np_out)
-#         self.cl_points = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_out)
         self.knl2(self.queue, (self.np_points.shape[0],), None, self.cl_out, self.cl_view, self.cl_points)
-#         np_out = np.empty_like(self.np_points)
-#         cl.enqueue_copy(self.queue, np_out, self.cl_out)
-#         #print(np_out)
-#         self.cl_points = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_out)
         self.knl3(self.queue, (self.np_points.shape[0],), None, self.cl_points, self.cl_screen, self.cl_out)
-        np_out = np.empty_like(self.np_points)
-#         cl.enqueue_copy(self.queue, np_out, self.cl_out)
-#         #print(np_out)
-#         self.cl_points = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_out)
+        self.prg.make_mats(self.queue, (int(self.np_points.shape[0]/3),), None, self.cl_out, self.tex_coords, self.mats)#.wait()
+        #np_out = np.empty_like(self.np_points)
         self.fmt = cl.ImageFormat(cl.channel_order.RGBA, cl.channel_type.UNSIGNED_INT8)
-        self.dest_buf = cl.Image(self.ctx, cl.mem_flags.WRITE_ONLY, self.fmt, shape=(350, 525))
-        self.prg.draw_tris(self.queue, (350, 525), None, self.cl_out, self.tex_coords, cl.cltypes.uint(np_out.shape[0]), self.cl_colours, self.tex, self.dest_buf).wait()
-        self.dest = np.empty((525,350,4), dtype="uint8")
-        cl.enqueue_copy(self.queue, self.dest, self.dest_buf, origin=(0, 0), region=(350, 525))
-        #print(self.dest)
-        surf = pygame.surfarray.make_surface(self.rgba2rgb(self.dest))
-        #pygame.transform.flip(surf, False, True)
+        self.dest_buf = cl.Image(self.ctx, cl.mem_flags.WRITE_ONLY, self.fmt, shape=(self.h, self.w))
+        self.prg.draw_tris(self.queue, (self.h, self.w), None, self.cl_out, self.tex_coords, cl.cltypes.uint(self.np_points.shape[0]), self.cl_colours, self.mats, self.tex, self.dest_buf).wait()
+        self.dest = np.empty((self.w,self.h,4), dtype="uint8")
+        cl.enqueue_copy(self.queue, self.dest, self.dest_buf, origin=(0, 0), region=(self.h, self.w))
+
+        surf = pygame.surfarray.make_surface(self.dest[:,:,:3])
         render_surface.blit(surf, (0, 0))
         verts = font.render(str(len(self.np_points)), 1, (0, 0, 0))
         render_surface.blit(verts, (0, 30))
 
+h = 1080
+w = 1920
+
 pygame.init()
-main_screen = pygame.display.set_mode((525, 350))
-render_surface = pygame.Surface((525, 350))
+main_screen = pygame.display.set_mode((w, h))
+render_surface = pygame.Surface((w, h))
 font = pygame.font.SysFont("Arial", 15)
-m = main()
+m = main(h, w)
 clock = pygame.time.Clock()
 r = True
+# for i in range(100):
+#     m.make()
 while r == True:
     dt = clock.tick(60)/1000.0
     m.update(dt)
@@ -553,5 +582,6 @@ while r == True:
             pygame.quit()
             r = False
     m.handle_input(events, pressed_keys)
-    #r=False
+    #r = False
+pygame.quit()
             

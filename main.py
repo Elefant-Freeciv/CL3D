@@ -1,0 +1,557 @@
+import pygame, math
+import pyopencl as cl
+import numpy as np
+from multiprocessing import Process
+from PIL import Image
+
+def sort(points):
+    tris = [[]]
+    for point in points:
+        #print(tris)
+        if len(tris[-1]) < 3:
+            tris[-1].append(point)
+        else:
+            #if len(tris) > 0:
+            tris[-1].append([len(tris)-1,0,0])
+            tris.append([point])
+    tris[-1].append([len(tris)-1,0,0])
+    tris.sort(
+            key=lambda k: sum([vec[2] for vec in k]) / 3, reverse=True)
+    trisids = []
+    for tri in tris:
+        trisids.append(tri[3][0])
+    return trisids
+
+class Math3D:
+    def translate(mat, vec3):
+        mat[0][3] = vec3[0]
+        mat[1][3] = vec3[1]
+        mat[2][3] = vec3[2]
+        
+    def rotate(mat, angle, vec3):
+        angle_x = vec3[0] * angle
+        angle_y = vec3[1] * angle
+        angle_z = vec3[2] * angle
+
+        matB = np.eye(4, dtype=np.float32)
+        matA = mat
+
+        #x rotation
+        matB[1][1] = math.cos(angle_x)
+        matB[1][2] = -math.sin(angle_x)
+        matB[2][1] = math.sin(angle_x)
+        matB[2][2] = math.cos(angle_x)
+
+        matA = np.dot(matA, matB)
+
+        #y rotation
+        matB = np.eye(4, dtype=np.float32)
+        matB[0][0] = math.cos(angle_y)
+        matB[0][2] = math.sin(angle_y)
+        matB[2][0] = -math.sin(angle_y)
+        matB[2][2] = math.cos(angle_y)
+
+        matA = np.dot(matA, matB)
+
+        #z rotation
+        matB = np.eye(4, dtype=np.float32)
+        matB[0][0] = math.cos(angle_z)
+        matB[0][1] = -math.sin(angle_z)
+        matB[1][0] = math.sin(angle_z)
+        matB[1][1] = math.cos(angle_z)
+
+        matA = np.dot(matA, matB)
+        return matA
+
+class main:
+    def __init__(self):
+        self.viewpos = [0.0, 0.0, -10.0]
+        self.rotation = [0.0, 0.0, 0.0]
+        self.delta = 0.0
+        self.clicking = False
+        self.start_click = []
+        self.ctx = cl.create_some_context()
+        self.queue = cl.CommandQueue(self.ctx)
+        self.prg = cl.Program(self.ctx, '''//CL//
+        float4 mul(__global const float4 mat[4], const float4 point)
+        {
+            float4 rtn;
+            rtn.x = dot(mat[0], point);
+            rtn.y = dot(mat[1], point);
+            rtn.z = dot(mat[2], point);
+            rtn.w = dot(mat[3], point);
+            return rtn;
+
+        }
+        
+        /*float my_dot(a, b)
+        {
+            return a.x*b.x + a.y*b.y + a.z * b.z;
+        }*/
+        
+        bool orient(float4 A,float4 B,float4 C)
+        {
+            float2 AB = (float2)(B.x-A.x, B.y-A.y);
+            float2 AC = (float2)(C.x-A.x, C.y-A.y);
+            float cross = (AB.x * AC.y) - (AB.y * AC.x);
+            if (cross > 0){return true;}
+            else{return false;}
+        }
+
+        bool point_in_triangle (int2 pos, float4 v1, float4 v2, float4 v3)
+        {
+            float4 pt = (float4)(convert_float(pos.x),convert_float(pos.y), 0.0, 0.0);
+            return ((orient(v1, v2, pt) && orient(v2, v3, pt) && orient(v3, v1, pt))||(!orient(v1, v2, pt) && !orient(v2, v3, pt) && !orient(v3, v1, pt)));
+        }
+        
+        float my_distance(float4 p1, float4 p2)
+        {
+            return sqrt(pow((p2.x-p1.x), 2)+pow((p2.y-p1.y), 2));
+        }
+        
+        float pixel_depth(int2 pos, float4 p1, float4 p2, float4 p3)
+        {
+            float4 pt = (float4)(convert_float(pos.x),convert_float(pos.y), 0.0, 1);
+            float A = p1.y * (p2.w-p3.w) + p2.y * (p3.w-p1.w) + p3.y * (p1.w-p2.w);
+            float B = p1.w * (p2.x-p3.x) + p2.w * (p3.x-p1.x) + p3.w * (p1.x-p2.x);
+            float C = p1.x * (p2.y-p3.y) + p2.x * (p3.y-p1.y) + p3.x * (p1.y-p2.y);
+            float D = -p1.x * (p2.y*p3.w - p3.y*p2.w) - p2.x * (p3.y*p1.w - p1.y*p3.w) - p3.x * (p1.y*p2.w - p2.y*p1.w);
+            return ((A * pt.x)+(B * pt.y)+D)/-C;
+        }
+        
+        uint4 texture_pixel(int2 pos, float4 p1, float4 p2, float4 p3, float4 P1, float4 P2, float4 P3, read_only image2d_t tex)
+        {
+            float3 mat1[3];
+            float3 mat2[3];
+            float3 mat3[3];
+            float3 mat4[3];
+            float3 mat5[3];
+            float3 row;
+            float det;
+            float2 px = (float2)(convert_float(pos.x),convert_float(pos.y));
+            /*
+            p1.x p2.x p3.x
+            p1.y p2.y p3.y
+            1    1    1
+            */
+            row = (float3)((p2.y-p3.y), (p1.y-p3.y), (p1.y-p2.y));
+            det = 1/(p1.x*(p2.y-p3.y)-p2.x*(p1.y-p3.y)+p3.x*(p1.y-p2.y));
+            
+            mat1[0] = (float3)((p2.y-p3.y)*det, -(p2.x-p3.x)*det, (p2.x*p3.y-p2.y*p3.x)*det);
+            mat1[1] = (float3)(-(p1.y-p3.y)*det, (p1.x-p3.x)*det, -(p1.x*p3.y-p3.x*p1.y)*det);
+            mat1[2] = (float3)((p1.y-p2.y)*det, -(p1.x-p2.x)*det, (p1.x*p2.y-p2.x*p1.y)*det);
+            
+            mat2[0] = (float3)(P1.x, P2.x, P3.x);
+            mat2[1] = (float3)(P1.y, P2.y, P3.y);
+            mat2[2] = (float3)(1, 1, 1);
+            
+            mat3[0] = (float3)(dot(mat2[0], (float3)(mat1[0].x, mat1[1].x, mat1[2].x)),
+                                dot(mat2[0], (float3)(mat1[0].y, mat1[1].y, mat1[2].y)),
+                                dot(mat2[0], (float3)(mat1[0].z, mat1[1].z, mat1[2].z)));
+            mat3[1] = (float3)(dot(mat2[1], (float3)(mat1[0].x, mat1[1].x, mat1[2].x)),
+                                dot(mat2[1], (float3)(mat1[0].y, mat1[1].y, mat1[2].y)),
+                                dot(mat2[1], (float3)(mat1[0].z, mat1[1].z, mat1[2].z)));
+            mat3[2] = (float3)(0,0,1);
+                                
+            mat4[0] = (float3)(px.x, 0, 1);
+            mat4[1] = (float3)(px.y, 0, 1);
+            mat4[2] = (float3)(1, 1, 1);
+            
+            mat5[0] = (float3)(dot(mat3[0], (float3)(mat4[0].x, mat4[1].x, mat4[2].x)),
+                                dot(mat3[0], (float3)(mat4[0].y, mat4[1].y, mat4[2].y)),
+                                dot(mat3[0], (float3)(mat4[0].z, mat4[1].z, mat4[2].z)));
+            mat5[1] = (float3)(dot(mat3[1], (float3)(mat4[0].x, mat4[1].x, mat4[2].x)),
+                                dot(mat3[1], (float3)(mat4[0].y, mat4[1].y, mat4[2].y)),
+                                dot(mat3[1], (float3)(mat4[0].z, mat4[1].z, mat4[2].z)));
+            mat5[2] = (float3)(dot(mat3[2], (float3)(mat4[0].x, mat4[1].x, mat4[2].x)),
+                                dot(mat3[2], (float3)(mat4[0].y, mat4[1].y, mat4[2].y)),
+                                dot(mat3[2], (float3)(mat4[0].z, mat4[1].z, mat4[2].z)));
+            
+            //printf("[%f|%f|%f|%f|%f|%f|%f|%f|%f|%f|%f|%f|%f|%f|%f|%f]",  px.x, px.y, p1.x, p1.y, p2.x, p2.y, p3.x, p3.y, P1.x, P1.y, P2.x, P2.y, P3.x, P3.y, mat5[0].x, mat5[1].x);
+            px = (float2)(mat5[0].x, mat5[1].x);
+            const sampler_t sampler =  CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP_TO_EDGE | CLK_FILTER_NEAREST;
+            return read_imageui(tex, sampler, px);
+            //return (uint4)(convert_int(px.x), convert_int(px.y),0,255);
+        }
+
+        __kernel void transform(
+            __global const float4 *points, __global const float4 mat[4], __global float4 *out
+        )
+        {
+            int gid = get_global_id(0);
+            float gidf = convert_float(gid);
+            out[gid] = mul(mat, points[gid]);
+        }
+
+        __kernel void transform2(
+            __global const float4 *points, __global const float4 mat[4], __global float4 *out
+        )
+        {
+            int gid = get_global_id(0);
+            float gidf = convert_float(gid);
+            out[gid] = mul(mat, points[gid]);
+            out[gid].w = -out[gid].z;
+            out[gid] = (float4)(out[gid].x / out[gid].w, out[gid].y / out[gid].w, out[gid].z / out[gid].w, points[gid].z);
+        }
+        
+        __kernel void map2screen(
+            __global const float4 *points, __global const float2 *screen, __global float4 *out
+        )
+        {
+            int gid = get_global_id(0);
+            float x = ((points[gid].x + 1) / 2) * screen[0].x;
+            float y = ((-points[gid].y + 1) / 2) * screen[0].y;
+            out[gid] = (float4)(y, x, 0, points[gid].w);
+        }
+        
+        __kernel void draw_tris(
+            __global const float4 *tris, __global const float4 *tex_coords, uint pcount, __global const uint4 *colours, read_only image2d_t tex, write_only image2d_t screen)
+            {
+                //float x = tris[0].w;
+                //printf("[%f]",  x);
+                const sampler_t sampler =  CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP_TO_EDGE | CLK_FILTER_NEAREST;
+                int2 pos = (int2)(get_global_id(0), get_global_id(1));
+                write_imageui(screen, pos, (uint4)(pos.x,pos.y,convert_int(tris[0].x),255));
+                float old_pixel_depth = 100000;
+                float test_pixel_depth;
+                for (int i = 0; i<pcount; i += 3)
+                {
+                    test_pixel_depth = pixel_depth(pos, tris[i], tris[i+1], tris[i+2]);
+                    if(point_in_triangle(pos, tris[i], tris[i+1], tris[i+2]) && test_pixel_depth < old_pixel_depth)
+                    {
+                        write_imageui(screen, pos, texture_pixel(pos, tris[i], tris[i+1], tris[i+2], tex_coords[i], tex_coords[i+1], tex_coords[i+2], tex));
+                        old_pixel_depth = test_pixel_depth;
+                    }
+                }
+            }
+        ''').build()
+        mf = cl.mem_flags
+
+        vertices = [(10.0, 0.0, 0.0),  #x axis
+                    (-10.0, 0.0, 0.0), #x axis
+                    (10.0, 0.0, .1),  #x axis
+                    (0.0, 10.0, .1),  #y axis
+                    (0.0, 10.0, 0.0),  #y axis
+                    (0.0, -10.0, 0.0),  #y axis
+                    (.1, 0.0, 10.0),  #z axis
+                    (0.0, 0.0, 10.0),  #z axis
+                    (0.0, 0.0, -10.0)]
+        tex_coords = [(0, 0),
+                    (255, 0),
+                    (0, 255),
+                    (0, 0),
+                    (0, 255),
+                    (255, 0),
+                    (255, 0),
+                    (0, 0),
+                    (0, 255)]
+        colours = [(255,0,0,255),
+                   (0,255,0,255),
+                   (0,0,255,255)]
+        self.np_colours = np.array(colours, dtype="uint")
+        self.cl_colours = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_colours)
+        points = []
+        for v in vertices:
+            points.append((v[0], v[1], v[2], 1.0))
+        self.np_points = np.array(points, dtype=np.float32)
+        print(self.np_points)
+        self.texc = []
+        for coord in tex_coords:
+            self.texc.append([coord[0], coord[1],0,0])
+        np_texc = np.array(self.texc, dtype=np.float32)
+        print(np_texc)
+        self.tex_coords = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_texc)
+        
+        view = [[0.08333333333333333, 0.0, 0.0, 0.0], [0.0, 0.125, 0.0, 0.0], [0.0, 0.0, -0.02002002002002002, -0.8018018018018018], [0, 0, 0, 1.0]]
+        np_view = np.array(view, dtype=np.float32)
+        print(np_view)
+
+        model = [[1.0, 0.0, 0.0, 1.0],
+   [0.0, 1.0, 0.0, 1.0],
+   [0.0, 0.0, 1.0, 1.0],
+   [0.0, 0.0, 0.0, 1.0]]
+        np_model = np.array(model, dtype=np.float32)
+        print(np_model)
+        self.src_img = Image.open('Tex2.png').convert('RGBA')
+        self.src = np.array(self.src_img)
+        self.tex = cl.image_from_array(self.ctx, self.src, 4)
+        
+        np_screen = np.array([[525, 350]], dtype=np.float32)
+
+        self.cl_screen = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_screen)
+        self.cl_out = cl.Buffer(self.ctx, mf.WRITE_ONLY, self.np_points.nbytes)
+        
+        self.knl = self.prg.transform
+        self.knl2 = self.prg.transform2
+        self.knl3 = self.prg.map2screen
+        
+        
+    def update(self, delta):
+        self.delta = delta
+        if self.clicking:
+            rel_pos = [pygame.mouse.get_pos()[1] - self.start_click[1], pygame.mouse.get_pos()[0] - self.start_click[0]]
+            self.rotation[0] = -rel_pos[0] / 525
+            self.rotation[1] = -rel_pos[1] / 350
+            
+    def handle_input(self, events, pressed_keys):
+        for event in events:
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if self.clicking == False:
+                    self.start_click = [pygame.mouse.get_pos()[0], pygame.mouse.get_pos()[1]]
+                    self.clicking = True
+                if event.button == 3:
+                    self.make()
+            if event.type == pygame.MOUSEBUTTONUP:
+                self.clicking = False
+                self.start_click = [pygame.mouse.get_pos()[0], pygame.mouse.get_pos()[1]]
+        if pressed_keys[pygame.K_UP]:
+            self.viewpos[1] += 0.1
+        if pressed_keys[pygame.K_DOWN]:
+            self.viewpos[1] -= 0.1
+        if pressed_keys[pygame.K_LEFT]:
+            self.viewpos[0] -= 0.1
+        if pressed_keys[pygame.K_RIGHT]:
+            self.viewpos[0] += 0.1
+        if pressed_keys[pygame.K_PAGEUP]:
+            self.viewpos[2] -= 0.1
+        if pressed_keys[pygame.K_PAGEDOWN]:
+            self.viewpos[2] += 0.1
+        if pressed_keys[pygame.K_e]:
+            self.rotation[1] += 0.01
+        if pressed_keys[pygame.K_q]:
+            self.rotation[1] -= 0.01
+        if pressed_keys[pygame.K_w]:
+            self.rotation[0] += 0.01
+        if pressed_keys[pygame.K_s]:
+            self.rotation[0] -= 0.01
+            
+    def make(self):
+        vertices=[[-1.0, -1.0, -1.0],
+                 [1.0, -1.0, -1.0],
+                 [1.0, 1.0, -1.0],
+                 [1.0, 1.0, -1.0],
+                 [-1.0, 1.0, -1.0],
+                 [-1.0, -1.0, -1.0],
+
+                 [-1.0, -1.0, 1.0],
+                 [1.0, -1.0, 1.0],
+                 [1.0, 1.0, 1.0],
+                 [1.0, 1.0, 1.0],
+                 [-1.0, 1.0, 1.0],
+                 [-1.0, -1.0, 1.0],
+
+                 [-1.0, 1.0, 1.0],
+                 [-1.0, 1.0, -1.0],
+                 [-1.0, -1.0, -1.0],
+                 [-1.0, -1.0, -1.0],
+                 [-1.0, -1.0, 1.0],
+                 [-1.0, 1.0, 1.0],
+
+                 [1.0, 1.0, 1.0],
+                 [1.0, 1.0, -1.0],
+                 [1.0, -1.0, -1.0],
+                 [1.0, -1.0, -1.0],
+                 [1.0, -1.0, 1.0],
+                 [1.0, 1.0, 1.0],
+
+                 [-1.0, -1.0, -1.0],
+                 [1.0, -1.0, -1.0],
+                 [1.0, -1.0, 1.0],
+                 [1.0, -1.0, 1.0],
+                 [-1.0, -1.0, 1.0],
+                 [-1.0, -1.0, -1.0],
+
+                 [-1.0, 1.0, -1.0],
+                 [1.0, 1.0, -1.0],
+                 [1.0, 1.0, 1.0],
+                 [1.0, 1.0, 1.0],
+                 [-1.0, 1.0, 1.0],
+                 [-1.0, 1.0, -1.0]]
+        tex_coords = [(255, 0),
+                    (0, 0),
+                    (0, 255),
+                    (0, 255),
+                    (0, 0),
+                    (255, 0),
+                      
+                    (255, 0),
+                    (0, 0),
+                    (0, 255),
+                    (0, 255),
+                    (255, 255),
+                    (255, 0),
+                      
+                    (255, 0),
+                    (0, 0),
+                    (0, 255),
+                    (0, 255),
+                    (255, 255),
+                    (255, 0),
+                      
+                    (255, 0),
+                    (0, 0),
+                    (0, 255),
+                    (0, 255),
+                    (255, 255),
+                    (255, 0),
+                      
+                    (255, 0),
+                    (0, 0),
+                    (0, 255),
+                    (0, 255),
+                    (255, 255),
+                    (255, 0),
+                      
+                    (0, 0),
+                    (255, 0),
+                    (255, 255),
+                    (255, 255),
+                    (0, 255),
+                    (0, 0)]
+        """
+                    (0, 0),
+                    (255, 0),
+                    (255, 255),
+                    (255, 255),
+                    (0, 255),
+                    (0, 0)
+        """
+        mf = cl.mem_flags
+        
+        for coord in tex_coords:
+            self.texc.append([coord[0], coord[1],0,0])
+        np_texc = np.array(self.texc, dtype=np.float32)
+        print(np_texc)
+        self.tex_coords = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_texc)
+        
+        for vert in self.np_points:
+            vertices.append([vert[0], vert[1], vert[2]])
+        points = []
+        for v in vertices:
+            points.append((v[0], v[1], v[2], 1.0))
+        self.np_points = np.array(points, dtype=np.float32)
+        
+        c = [(255, 100, 100, 255),
+                   (255, 100, 100, 255),
+                   (255, 255, 100, 255),
+                   (255, 255, 100, 255),
+                   (255, 100, 255, 255),
+                   (255, 100, 255, 255),
+                   (100, 255, 100, 255),
+                   (100, 255, 100, 255),
+                   (100, 255, 255, 255),
+                   (100, 255, 255, 255),
+                   (100, 0, 100, 255),
+                   (100, 0, 100, 255)]
+        colours = []
+        for colour in c:
+            colours.append(colour)
+        for colour in self.np_colours:
+            colours.append(colour)
+        print(colours)
+        self.np_colours = np.array(colours, dtype="uint")
+        self.cl_colours = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_colours)
+        
+    def rgba2rgb(self, rgba, background=(0,0,0)):
+        row, col, ch = rgba.shape
+
+        if ch == 3:
+            return rgba
+
+        assert ch == 4, 'RGBA image has 4 channels.'
+
+        rgb = np.zeros( (row, col, 3), dtype='float32' )
+        r, g, b, a = rgba[:,:,0], rgba[:,:,1], rgba[:,:,2], rgba[:,:,3]
+
+        a = np.asarray( a, dtype='float32' ) / 255.0
+
+        R, G, B = background
+
+        rgb[:,:,0] = r * a + (1.0 - a) * R
+        rgb[:,:,1] = g * a + (1.0 - a) * G
+        rgb[:,:,2] = b * a + (1.0 - a) * B
+
+        return np.asarray( rgb, dtype='uint8' )
+        
+    def render(self, render_surface):
+        np_model = np.eye(4, dtype=np.float32)
+        Math3D.translate(np_model, (1.0, 1.0, 1.0))
+        np_model = Math3D.rotate(np_model, 10.0 * self.rotation[0], (1.0, 0.0, 0.0))
+        np_model = Math3D.rotate(np_model, 10.0 * self.rotation[1], (0.0, 1.0, 0.0))
+        #print(np_model)
+        
+        view = np.eye(4, dtype=np.float32)
+        Math3D.translate(view, (-self.viewpos[0], -self.viewpos[1], self.viewpos[2]))
+        
+        right = 12.0
+        top = 8.0
+        far = 100.0
+        near = 0.1
+        
+        orth_proj = np.eye(4, dtype=np.float32)
+        orth_proj[0][0] = 1 / right
+        orth_proj[1][1] = 1 / top
+        orth_proj[2][2] = -2 / (far - near)
+        orth_proj[2][3] = -((far + near) / (far - near))
+        #print(orth_proj)
+        np_view = np.dot(orth_proj, view)
+        #print(np_view)
+        
+        mf = cl.mem_flags
+        self.cl_points = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.np_points)
+        self.cl_view = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_view)
+        self.cl_model = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_model)
+        self.cl_out = cl.Buffer(self.ctx, mf.READ_WRITE, self.np_points.nbytes)
+        
+        self.knl(self.queue, (self.np_points.shape[0],1), None, self.cl_points, self.cl_model, self.cl_out)
+#         np_out = np.empty_like(self.np_points)
+#         cl.enqueue_copy(self.queue, np_out, self.cl_out)
+#         #print(np_out)
+#         self.cl_points = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_out)
+        self.knl2(self.queue, (self.np_points.shape[0],), None, self.cl_out, self.cl_view, self.cl_points)
+#         np_out = np.empty_like(self.np_points)
+#         cl.enqueue_copy(self.queue, np_out, self.cl_out)
+#         #print(np_out)
+#         self.cl_points = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_out)
+        self.knl3(self.queue, (self.np_points.shape[0],), None, self.cl_points, self.cl_screen, self.cl_out)
+        np_out = np.empty_like(self.np_points)
+#         cl.enqueue_copy(self.queue, np_out, self.cl_out)
+#         #print(np_out)
+#         self.cl_points = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_out)
+        self.fmt = cl.ImageFormat(cl.channel_order.RGBA, cl.channel_type.UNSIGNED_INT8)
+        self.dest_buf = cl.Image(self.ctx, cl.mem_flags.WRITE_ONLY, self.fmt, shape=(350, 525))
+        self.prg.draw_tris(self.queue, (350, 525), None, self.cl_out, self.tex_coords, cl.cltypes.uint(np_out.shape[0]), self.cl_colours, self.tex, self.dest_buf).wait()
+        self.dest = np.empty((525,350,4), dtype="uint8")
+        cl.enqueue_copy(self.queue, self.dest, self.dest_buf, origin=(0, 0), region=(350, 525))
+        #print(self.dest)
+        surf = pygame.surfarray.make_surface(self.rgba2rgb(self.dest))
+        #pygame.transform.flip(surf, False, True)
+        render_surface.blit(surf, (0, 0))
+        verts = font.render(str(len(self.np_points)), 1, (0, 0, 0))
+        render_surface.blit(verts, (0, 30))
+
+pygame.init()
+main_screen = pygame.display.set_mode((525, 350))
+render_surface = pygame.Surface((525, 350))
+font = pygame.font.SysFont("Arial", 15)
+m = main()
+clock = pygame.time.Clock()
+r = True
+while r == True:
+    dt = clock.tick(60)/1000.0
+    m.update(dt)
+    fps = font.render(str(int(clock.get_fps())), 1, (0, 0, 0))
+    render_surface.fill((255, 255, 255))
+    m.render(render_surface)
+    main_screen.blit(render_surface, (0, 0))
+    main_screen.blit(fps, (0, 0))
+    pygame.display.flip()
+    pressed_keys = pygame.key.get_pressed()
+    events = pygame.event.get()
+    for event in events:
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            r = False
+    m.handle_input(events, pressed_keys)
+    #r=False
+            

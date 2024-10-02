@@ -134,7 +134,7 @@ class main:
             
             mat3[0] = mats[i];
             mat3[1] = mats[i+1];
-            mat3[2] = mats[i+2];
+            //mat3[2] = mats[i+2];
             
             //printf("[%f|%f|%f|%f|%f|%f]/n",  mat3[i][0], mat3[i][1], mat3[i][2], mat3[i+1][0], mat3[i+1][1], mat3[i+1][2]);
                                 
@@ -142,7 +142,7 @@ class main:
             mat4[1] = (float3)(px.y, 0, 1);
             mat4[2] = (float3)(1, 1, 1);
             
-            mat5[0] = (float3)(dot(mat3[0], (float3)(mat4[0].x, mat4[1].x, mat4[2].x)),
+            /*mat5[0] = (float3)(dot(mat3[0], (float3)(mat4[0].x, mat4[1].x, mat4[2].x)),
                                 dot(mat3[0], (float3)(mat4[0].y, mat4[1].y, mat4[2].y)),
                                 dot(mat3[0], (float3)(mat4[0].z, mat4[1].z, mat4[2].z)));
             mat5[1] = (float3)(dot(mat3[1], (float3)(mat4[0].x, mat4[1].x, mat4[2].x)),
@@ -150,10 +150,10 @@ class main:
                                 dot(mat3[1], (float3)(mat4[0].z, mat4[1].z, mat4[2].z)));
             mat5[2] = (float3)(dot(mat3[2], (float3)(mat4[0].x, mat4[1].x, mat4[2].x)),
                                 dot(mat3[2], (float3)(mat4[0].y, mat4[1].y, mat4[2].y)),
-                                dot(mat3[2], (float3)(mat4[0].z, mat4[1].z, mat4[2].z)));
+                                dot(mat3[2], (float3)(mat4[0].z, mat4[1].z, mat4[2].z)));*/
             
             //printf("[%f|%f|%f|%f|%f|%f|%f|%f|%f|%f|%f|%f|%f|%f|%f|%f]",  px.x, px.y, p1.x, p1.y, p2.x, p2.y, p3.x, p3.y, P1.x, P1.y, P2.x, P2.y, P3.x, P3.y, mat5[0].x, mat5[1].x);
-            px = (float2)(mat5[0].x, mat5[1].x);
+            px = (float2)(dot(mat3[0], (float3)(mat4[0].x, mat4[1].x, mat4[2].x)), dot(mat3[1], (float3)(mat4[0].x, mat4[1].x, mat4[2].x)));
             const sampler_t sampler =  CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP_TO_EDGE | CLK_FILTER_NEAREST;
             return read_imageui(tex, sampler, px);
             //return (uint4)(convert_int(px.x), convert_int(px.y),0,255);
@@ -177,6 +177,7 @@ class main:
             out[gid] = mul(mat, points[gid]);
             out[gid].w = -out[gid].z;
             out[gid] = (float4)(out[gid].x / out[gid].w, out[gid].y / out[gid].w, out[gid].z / out[gid].w, points[gid].z);
+            //printf("[%f|%f|%i]", out[gid].x, out[gid].y,gid);
         }
         
         __kernel void map2screen(
@@ -186,6 +187,7 @@ class main:
             int gid = get_global_id(0);
             float x = ((points[gid].x + 1) / 2) * screen[0].x;
             float y = ((-points[gid].y + 1) / 2) * screen[0].y;
+            printf("[%f|%f|%f|%f|%i]",  y, x, points[gid].x, points[gid].y,gid);
             out[gid] = (float4)(y, x, 0, points[gid].w);
         }
         
@@ -218,7 +220,7 @@ class main:
             
             mat2[0] = (float3)(P1.x, P2.x, P3.x);
             mat2[1] = (float3)(P1.y, P2.y, P3.y);
-            mat2[2] = (float3)(1, 1, 1);
+            //mat2[2] = (float3)(1, 1, 1);
             
             mats[i] = (float3)(dot(mat2[0], (float3)(mat1[0].x, mat1[1].x, mat1[2].x)),
                                 dot(mat2[0], (float3)(mat1[0].y, mat1[1].y, mat1[2].y)),
@@ -227,8 +229,10 @@ class main:
                                 dot(mat2[1], (float3)(mat1[0].y, mat1[1].y, mat1[2].y)),
                                 dot(mat2[1], (float3)(mat1[0].z, mat1[1].z, mat1[2].z)));
             mats[i+2] = (float3)(0,0,1);
-            //printf("%i", i);
-            //printf("[%f|%f|%f|%f|%f|%f|%f]",  mats[i][0], mats[i][1], mats[i][2], mats[i+1][0], mats[i+1][1], mats[i+1][2],i);
+            printf("%i", i);
+            //printf("[%f|%f|%f|%f|%f|%f|%i]",  P1.x, P1.y, P2.x, P2.y, P3.x, P3.y,i);
+            //printf("[%f|%f|%f|%f|%f|%f|%i]",  p1.x, p1.y, p2.x, p2.y, p3.x, p3.y,i);
+            //printf("[%f|%f|%f|%f|%f|%f|%i]",  mats[i][0], mats[i][1], mats[i][2], mats[i+1][0], mats[i+1][1], mats[i+1][2],i);
         }
         
         __kernel void draw_tris(
@@ -311,7 +315,7 @@ class main:
 
         self.cl_screen = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_screen)
         self.cl_out = cl.Buffer(self.ctx, mf.WRITE_ONLY, self.np_points.nbytes)
-        
+        print(len(vertices))
         np_mats = np.array((len(vertices), 3), dtype=np.float32)
         self.mats = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=np_mats)
         
@@ -455,7 +459,7 @@ class main:
         for coord in tex_coords:
             self.texc.append([coord[0], coord[1],0,0])
         np_texc = np.array(self.texc, dtype=np.float32)
-        #print(np_texc)
+        print(self.texc)
         self.tex_coords = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_texc)
         
         for vert in self.np_points:
@@ -537,6 +541,9 @@ class main:
         self.cl_view = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_view)
         self.cl_model = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_model)
         self.cl_out = cl.Buffer(self.ctx, mf.READ_WRITE, self.np_points.nbytes)
+        
+        np_mats = np.array((self.np_points.shape[0], 3), dtype=np.float32)
+        self.mats = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=np_mats)
 
         self.knl(self.queue, (self.np_points.shape[0],1), None, self.cl_points, self.cl_model, self.cl_out)
         self.knl2(self.queue, (self.np_points.shape[0],), None, self.cl_out, self.cl_view, self.cl_points)

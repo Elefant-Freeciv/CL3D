@@ -146,7 +146,7 @@ class main:
                                 dot(mat3[0], (float3)(mat4[0].y, mat4[1].y, mat4[2].y)),
                                 dot(mat3[0], (float3)(mat4[0].z, mat4[1].z, mat4[2].z)));
             mat5[1] = (float3)(dot(mat3[1], (float3)(mat4[0].x, mat4[1].x, mat4[2].x)),
-                                dot(mat3[1], (float3)(mat4[0].y, mat4[1].y, mat4[2].y)),
+                                dot(mat3[1], (floahttps://github.com/Elefant-Freeciv/CL3D/tree/1-make_mats-returns-all-nan-mats-after-adding-items-to-the-scenet3)(mat4[0].y, mat4[1].y, mat4[2].y)),
                                 dot(mat3[1], (float3)(mat4[0].z, mat4[1].z, mat4[2].z)));
             mat5[2] = (float3)(dot(mat3[2], (float3)(mat4[0].x, mat4[1].x, mat4[2].x)),
                                 dot(mat3[2], (float3)(mat4[0].y, mat4[1].y, mat4[2].y)),
@@ -316,8 +316,8 @@ class main:
         self.cl_screen = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_screen)
         self.cl_out = cl.Buffer(self.ctx, mf.WRITE_ONLY, self.np_points.nbytes)
         print(len(vertices))
-        np_mats = np.array((len(vertices), 3), dtype=np.float32)
-        self.mats = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=np_mats)
+        self.np_mats = np.array((len(vertices), 3), dtype=np.float32)
+        self.mats = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.np_mats)
         
         self.knl = self.prg.transform
         self.knl2 = self.prg.transform2
@@ -469,8 +469,8 @@ class main:
             points.append((v[0], v[1], v[2], 1.0))
         self.np_points = np.array(points, dtype=np.float32)
         print(self.np_points.shape)
-        np_mats = np.array((self.np_points.shape[0], 3), dtype=np.float32)
-        self.mats = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=np_mats)
+#         self.np_mats = np.array((len(vertices), 3), dtype=np.float32)
+#         self.mats = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.np_mats)
         
         c = [(255, 100, 100, 255),
                    (255, 100, 100, 255),
@@ -542,8 +542,8 @@ class main:
         self.cl_model = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_model)
         self.cl_out = cl.Buffer(self.ctx, mf.READ_WRITE, self.np_points.nbytes)
         
-        np_mats = np.array((self.np_points.shape[0], 3), dtype=np.float32)
-        self.mats = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=np_mats)
+        #np_mats = np.array((self.np_points.shape[0], 3), dtype=np.float32)
+        self.mats = cl.Buffer(self.ctx, mf.READ_WRITE, self.np_points.nbytes)
 
         self.knl(self.queue, (self.np_points.shape[0],1), None, self.cl_points, self.cl_model, self.cl_out)
         self.knl2(self.queue, (self.np_points.shape[0],), None, self.cl_out, self.cl_view, self.cl_points)
@@ -561,8 +561,8 @@ class main:
         verts = font.render(str(len(self.np_points)), 1, (0, 0, 0))
         render_surface.blit(verts, (0, 30))
 
-h = 1080
-w = 1920
+h = 350
+w = 525
 
 pygame.init()
 main_screen = pygame.display.set_mode((w, h))

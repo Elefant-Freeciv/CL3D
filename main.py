@@ -7,11 +7,9 @@ from PIL import Image
 def sort(points):
     tris = [[]]
     for point in points:
-        #print(tris)
         if len(tris[-1]) < 3:
             tris[-1].append(point)
         else:
-            #if len(tris) > 0:
             tris[-1].append([len(tris)-1,0,0])
             tris.append([point])
     tris[-1].append([len(tris)-1,0,0])
@@ -86,11 +84,6 @@ class main:
 
         }
         
-        /*float my_dot(a, b)
-        {
-            return a.x*b.x + a.y*b.y + a.z * b.z;
-        }*/
-        
         bool orient(float4 A,float4 B,float4 C)
         {
             float2 AB = (float2)(B.x-A.x, B.y-A.y);
@@ -123,8 +116,6 @@ class main:
         
         uint4 texture_pixel(int2 pos, int i, read_only image2d_t tex, __global float3 *mats)
         {
-            //printf("[%f|%f|%f|%f|%f|%f]/n",  mats[i][0], mats[i][1], mats[i][2], mats[i+1][0], mats[i+1][1], mats[i+1][2]);
-            //printf("%i", i);
             float3 mat3[3];
             float3 mat4[3];
             float3 mat5[3];
@@ -134,29 +125,14 @@ class main:
             
             mat3[0] = mats[i];
             mat3[1] = mats[i+1];
-            //mat3[2] = mats[i+2];
-            
-            //printf("[%f|%f|%f|%f|%f|%f]/n",  mat3[i][0], mat3[i][1], mat3[i][2], mat3[i+1][0], mat3[i+1][1], mat3[i+1][2]);
                                 
             mat4[0] = (float3)(px.x, 0, 1);
             mat4[1] = (float3)(px.y, 0, 1);
             mat4[2] = (float3)(1, 1, 1);
             
-            /*mat5[0] = (float3)(dot(mat3[0], (float3)(mat4[0].x, mat4[1].x, mat4[2].x)),
-                                dot(mat3[0], (float3)(mat4[0].y, mat4[1].y, mat4[2].y)),
-                                dot(mat3[0], (float3)(mat4[0].z, mat4[1].z, mat4[2].z)));
-            mat5[1] = (float3)(dot(mat3[1], (float3)(mat4[0].x, mat4[1].x, mat4[2].x)),
-                                dot(mat3[1], (floahttps://github.com/Elefant-Freeciv/CL3D/tree/1-make_mats-returns-all-nan-mats-after-adding-items-to-the-scenet3)(mat4[0].y, mat4[1].y, mat4[2].y)),
-                                dot(mat3[1], (float3)(mat4[0].z, mat4[1].z, mat4[2].z)));
-            mat5[2] = (float3)(dot(mat3[2], (float3)(mat4[0].x, mat4[1].x, mat4[2].x)),
-                                dot(mat3[2], (float3)(mat4[0].y, mat4[1].y, mat4[2].y)),
-                                dot(mat3[2], (float3)(mat4[0].z, mat4[1].z, mat4[2].z)));*/
-            
-            //printf("[%f|%f|%f|%f|%f|%f|%f|%f|%f|%f|%f|%f|%f|%f|%f|%f]",  px.x, px.y, p1.x, p1.y, p2.x, p2.y, p3.x, p3.y, P1.x, P1.y, P2.x, P2.y, P3.x, P3.y, mat5[0].x, mat5[1].x);
             px = (float2)(dot(mat3[0], (float3)(mat4[0].x, mat4[1].x, mat4[2].x)), dot(mat3[1], (float3)(mat4[0].x, mat4[1].x, mat4[2].x)));
             const sampler_t sampler =  CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP_TO_EDGE | CLK_FILTER_NEAREST;
             return read_imageui(tex, sampler, px);
-            //return (uint4)(convert_int(px.x), convert_int(px.y),0,255);
         }
 
         __kernel void transform(
@@ -177,7 +153,6 @@ class main:
             out[gid] = mul(mat, points[gid]);
             out[gid].w = -out[gid].z;
             out[gid] = (float4)(out[gid].x / out[gid].w, out[gid].y / out[gid].w, out[gid].z / out[gid].w, points[gid].z);
-            //printf("[%f|%f|%i]", out[gid].x, out[gid].y,gid);
         }
         
         __kernel void map2screen(
@@ -187,7 +162,6 @@ class main:
             int gid = get_global_id(0);
             float x = ((points[gid].x + 1) / 2) * screen[0].x;
             float y = ((-points[gid].y + 1) / 2) * screen[0].y;
-            printf("[%f|%f|%f|%f|%i]",  y, x, points[gid].x, points[gid].y,gid);
             out[gid] = (float4)(y, x, 0, points[gid].w);
         }
         
@@ -220,7 +194,6 @@ class main:
             
             mat2[0] = (float3)(P1.x, P2.x, P3.x);
             mat2[1] = (float3)(P1.y, P2.y, P3.y);
-            //mat2[2] = (float3)(1, 1, 1);
             
             mats[i] = (float3)(dot(mat2[0], (float3)(mat1[0].x, mat1[1].x, mat1[2].x)),
                                 dot(mat2[0], (float3)(mat1[0].y, mat1[1].y, mat1[2].y)),
@@ -229,17 +202,11 @@ class main:
                                 dot(mat2[1], (float3)(mat1[0].y, mat1[1].y, mat1[2].y)),
                                 dot(mat2[1], (float3)(mat1[0].z, mat1[1].z, mat1[2].z)));
             mats[i+2] = (float3)(0,0,1);
-            printf("%i", i);
-            //printf("[%f|%f|%f|%f|%f|%f|%i]",  P1.x, P1.y, P2.x, P2.y, P3.x, P3.y,i);
-            //printf("[%f|%f|%f|%f|%f|%f|%i]",  p1.x, p1.y, p2.x, p2.y, p3.x, p3.y,i);
-            //printf("[%f|%f|%f|%f|%f|%f|%i]",  mats[i][0], mats[i][1], mats[i][2], mats[i+1][0], mats[i+1][1], mats[i+1][2],i);
         }
         
         __kernel void draw_tris(
             __global const float4 *tris, __global const float4 *tex_coords, uint pcount, __global const uint4 *colours, __global float3 *mats, read_only image2d_t tex, write_only image2d_t screen)
             {
-                //float x = tris[0].w;
-                //printf("[%f]",  x);
                 const sampler_t sampler =  CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP_TO_EDGE | CLK_FILTER_NEAREST;
                 int2 pos = (int2)(get_global_id(0), get_global_id(1));
                 write_imageui(screen, pos, (uint4)(255,255,255,255));//(uint4)(pos.x,pos.y,convert_int(tris[0].x),255));
@@ -302,9 +269,9 @@ class main:
         print(np_view)
 
         model = [[1.0, 0.0, 0.0, 1.0],
-   [0.0, 1.0, 0.0, 1.0],
-   [0.0, 0.0, 1.0, 1.0],
-   [0.0, 0.0, 0.0, 1.0]]
+                 [0.0, 1.0, 0.0, 1.0],
+                 [0.0, 0.0, 1.0, 1.0],
+                 [0.0, 0.0, 0.0, 1.0]]
         np_model = np.array(model, dtype=np.float32)
         print(np_model)
         self.src_img = Image.open('Tex2.png').convert('RGBA')
@@ -446,14 +413,7 @@ class main:
                     (255, 255),
                     (0, 255),
                     (0, 0)]
-        """
-                    (0, 0),
-                    (255, 0),
-                    (255, 255),
-                    (255, 255),
-                    (0, 255),
-                    (0, 0)
-        """
+
         mf = cl.mem_flags
         
         for coord in tex_coords:
@@ -469,8 +429,6 @@ class main:
             points.append((v[0], v[1], v[2], 1.0))
         self.np_points = np.array(points, dtype=np.float32)
         print(self.np_points.shape)
-#         self.np_mats = np.array((len(vertices), 3), dtype=np.float32)
-#         self.mats = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.np_mats)
         
         c = [(255, 100, 100, 255),
                    (255, 100, 100, 255),
@@ -542,14 +500,13 @@ class main:
         self.cl_model = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_model)
         self.cl_out = cl.Buffer(self.ctx, mf.READ_WRITE, self.np_points.nbytes)
         
-        #np_mats = np.array((self.np_points.shape[0], 3), dtype=np.float32)
         self.mats = cl.Buffer(self.ctx, mf.READ_WRITE, self.np_points.nbytes)
 
         self.knl(self.queue, (self.np_points.shape[0],1), None, self.cl_points, self.cl_model, self.cl_out)
         self.knl2(self.queue, (self.np_points.shape[0],), None, self.cl_out, self.cl_view, self.cl_points)
         self.knl3(self.queue, (self.np_points.shape[0],), None, self.cl_points, self.cl_screen, self.cl_out)
         self.prg.make_mats(self.queue, (int(self.np_points.shape[0]/3),), None, self.cl_out, self.tex_coords, self.mats)#.wait()
-        #np_out = np.empty_like(self.np_points)
+
         self.fmt = cl.ImageFormat(cl.channel_order.RGBA, cl.channel_type.UNSIGNED_INT8)
         self.dest_buf = cl.Image(self.ctx, cl.mem_flags.WRITE_ONLY, self.fmt, shape=(self.h, self.w))
         self.prg.draw_tris(self.queue, (self.h, self.w), None, self.cl_out, self.tex_coords, cl.cltypes.uint(self.np_points.shape[0]), self.cl_colours, self.mats, self.tex, self.dest_buf).wait()
@@ -571,8 +528,6 @@ font = pygame.font.SysFont("Arial", 15)
 m = main(h, w)
 clock = pygame.time.Clock()
 r = True
-# for i in range(100):
-#     m.make()
 while r == True:
     dt = clock.tick(60)/1000.0
     m.update(dt)
@@ -589,6 +544,5 @@ while r == True:
             pygame.quit()
             r = False
     m.handle_input(events, pressed_keys)
-    #r = False
 pygame.quit()
             

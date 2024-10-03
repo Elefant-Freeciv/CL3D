@@ -127,35 +127,21 @@ class main:
             const sampler_t sampler =  CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP_TO_EDGE | CLK_FILTER_NEAREST;
             return read_imageui(tex, sampler, px);
         }
-
-        __kernel void transform(
-            __global const float4 *points, __global const float4 mat[4], __global float4 *out
-        )
-        {
-            int gid = get_global_id(0);
-            float gidf = convert_float(gid);
-            out[gid] = mul(mat, points[gid]);
-        }
-
-        __kernel void transform2(
-            __global const float4 *points, __global const float4 mat[4], __global float4 *out
-        )
-        {
-            int gid = get_global_id(0);
-            float gidf = convert_float(gid);
-            out[gid] = mul(mat, points[gid]);
-            out[gid].w = -out[gid].z;
-            out[gid] = (float4)(out[gid].x / out[gid].w, out[gid].y / out[gid].w, out[gid].z / out[gid].w, points[gid].z);
-        }
         
-        __kernel void map2screen(
-            __global const float4 *points, __global const float2 *screen, __global float4 *out
-        )
+        __kernel void vertex(__global const float4 *points,
+                             __global const float4 mat[4],
+                             __global const float2 *screen,
+                             __global float4 *out)
         {
+            float4 workvec;
             int gid = get_global_id(0);
-            float x = ((points[gid].x + 1) / 2) * screen[0].x;
-            float y = ((-points[gid].y + 1) / 2) * screen[0].y;
-            out[gid] = (float4)(y, x, 0, points[gid].w);
+            //run custom vertex code
+            workvec = mul(mat, points[gid]);
+            //workvec.w = -workvec.z;
+            workvec = (float4)(workvec.x / workvec.w, workvec.y / workvec.w, workvec.z / workvec.w, -workvec.z);
+            float x = ((workvec.x + 1) / 2) * screen[0].x;
+            float y = ((-workvec.y + 1) / 2) * screen[0].y;
+            out[gid] = (float4)(y, x, 0, workvec.w);
         }
         
         __kernel void make_mats(
@@ -278,9 +264,7 @@ class main:
         self.np_mats = np.array((len(vertices), 3), dtype=np.float32)
         self.mats = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.np_mats)
         
-        self.knl = self.prg.transform
-        self.knl2 = self.prg.transform2
-        self.knl3 = self.prg.map2screen
+        self.vertex_shader = self.prg.vertex
         
         
     def update(self, delta):
@@ -485,6 +469,7 @@ class main:
         orth_proj[2][3] = -((far + near) / (far - near))
         
         np_view = np.dot(orth_proj, view)
+        np_view = np.dot(np_view, np_model)
         
         mf = cl.mem_flags
         self.cl_points = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.np_points)
@@ -493,11 +478,10 @@ class main:
         self.cl_out = cl.Buffer(self.ctx, mf.READ_WRITE, self.np_points.nbytes)
         
         self.mats = cl.Buffer(self.ctx, mf.READ_WRITE, self.np_points.nbytes)
-
-        self.knl(self.queue, (self.np_points.shape[0],1), None, self.cl_points, self.cl_model, self.cl_out)
-        self.knl2(self.queue, (self.np_points.shape[0],), None, self.cl_out, self.cl_view, self.cl_points)
-        self.knl3(self.queue, (self.np_points.shape[0],), None, self.cl_points, self.cl_screen, self.cl_out)
-        self.prg.make_mats(self.queue, (int(self.np_points.shape[0]/3),), None, self.cl_out, self.tex_coords, self.mats)#.wait()
+        
+        self.vertex_shader(self.queue, (self.np_points.shape[0],), None, self.cl_points, self.cl_view, self.cl_screen, self.cl_out)
+        
+        self.prg.make_mats(self.queue, (int(self.np_points.shape[0]/3),), None, self.cl_out, self.tex_coords, self.mats)
 
         self.fmt = cl.ImageFormat(cl.channel_order.RGBA, cl.channel_type.UNSIGNED_INT8)
         self.dest_buf = cl.Image(self.ctx, cl.mem_flags.WRITE_ONLY, self.fmt, shape=(self.h, self.w))

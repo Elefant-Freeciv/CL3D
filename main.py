@@ -84,7 +84,7 @@ class main:
 
         }
         
-        bool orient(float4 A,float4 B,float4 C)
+        bool orient(float4 A,float4 B,float2 C)
         {
             float2 AB = (float2)(B.x-A.x, B.y-A.y);
             float2 AC = (float2)(C.x-A.x, C.y-A.y);
@@ -95,7 +95,7 @@ class main:
 
         bool point_in_triangle (int2 pos, float4 v1, float4 v2, float4 v3)
         {
-            float4 pt = (float4)(convert_float(pos.x),convert_float(pos.y), 0.0, 0.0);
+            float2 pt = (float2)(convert_float(pos.x),convert_float(pos.y));
             return ((orient(v1, v2, pt) && orient(v2, v3, pt) && orient(v3, v1, pt))||(!orient(v1, v2, pt) && !orient(v2, v3, pt) && !orient(v3, v1, pt)));
         }
         
@@ -106,31 +106,24 @@ class main:
         
         float pixel_depth(int2 pos, float4 p1, float4 p2, float4 p3)
         {
-            float4 pt = (float4)(convert_float(pos.x),convert_float(pos.y), 0.0, 1);
+            //float4 pt = (float4)(convert_float(pos.x),convert_float(pos.y), 0.0, 1);
             float A = p1.y * (p2.w-p3.w) + p2.y * (p3.w-p1.w) + p3.y * (p1.w-p2.w);
             float B = p1.w * (p2.x-p3.x) + p2.w * (p3.x-p1.x) + p3.w * (p1.x-p2.x);
             float C = p1.x * (p2.y-p3.y) + p2.x * (p3.y-p1.y) + p3.x * (p1.y-p2.y);
             float D = -p1.x * (p2.y*p3.w - p3.y*p2.w) - p2.x * (p3.y*p1.w - p1.y*p3.w) - p3.x * (p1.y*p2.w - p2.y*p1.w);
-            return ((A * pt.x)+(B * pt.y)+D)/-C;
+            return ((A * convert_float(pos.x))+(B * convert_float(pos.y))+D)/-C;
         }
         
         uint4 texture_pixel(int2 pos, int i, read_only image2d_t tex, __global float3 *mats)
         {
-            float3 mat3[3];
             float3 mat4[3];
-            float3 mat5[3];
-            float3 row;
-            float det;
             float2 px = (float2)(convert_float(pos.x),convert_float(pos.y));
-            
-            mat3[0] = mats[i];
-            mat3[1] = mats[i+1];
                                 
             mat4[0] = (float3)(px.x, 0, 1);
             mat4[1] = (float3)(px.y, 0, 1);
             mat4[2] = (float3)(1, 1, 1);
             
-            px = (float2)(dot(mat3[0], (float3)(mat4[0].x, mat4[1].x, mat4[2].x)), dot(mat3[1], (float3)(mat4[0].x, mat4[1].x, mat4[2].x)));
+            px = (float2)(dot(mats[i], (float3)(mat4[0].x, mat4[1].x, mat4[2].x)), dot(mats[i+1], (float3)(mat4[0].x, mat4[1].x, mat4[2].x)));
             const sampler_t sampler =  CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP_TO_EDGE | CLK_FILTER_NEAREST;
             return read_imageui(tex, sampler, px);
         }
@@ -201,7 +194,7 @@ class main:
             mats[i+1] = (float3)(dot(mat2[1], (float3)(mat1[0].x, mat1[1].x, mat1[2].x)),
                                 dot(mat2[1], (float3)(mat1[0].y, mat1[1].y, mat1[2].y)),
                                 dot(mat2[1], (float3)(mat1[0].z, mat1[1].z, mat1[2].z)));
-            mats[i+2] = (float3)(0,0,1);
+            //mats[i+2] = (float3)(0,0,1);
         }
         
         __kernel void draw_tris(

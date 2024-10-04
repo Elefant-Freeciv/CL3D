@@ -106,7 +106,6 @@ class main:
         
         float pixel_depth(int2 pos, float4 p1, float4 p2, float4 p3)
         {
-            //float4 pt = (float4)(convert_float(pos.x),convert_float(pos.y), 0.0, 1);
             float A = p1.y * (p2.w-p3.w) + p2.y * (p3.w-p1.w) + p3.y * (p1.w-p2.w);
             float B = p1.w * (p2.x-p3.x) + p2.w * (p3.x-p1.x) + p3.w * (p1.x-p2.x);
             float C = p1.x * (p2.y-p3.y) + p2.x * (p3.y-p1.y) + p3.x * (p1.y-p2.y);
@@ -194,7 +193,6 @@ class main:
             mats[i+1] = (float3)(dot(mat2[1], (float3)(mat1[0].x, mat1[1].x, mat1[2].x)),
                                 dot(mat2[1], (float3)(mat1[0].y, mat1[1].y, mat1[2].y)),
                                 dot(mat2[1], (float3)(mat1[0].z, mat1[1].z, mat1[2].z)));
-            //mats[i+2] = (float3)(0,0,1);
         }
         
         __kernel void draw_tris(

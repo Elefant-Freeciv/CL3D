@@ -1,8 +1,6 @@
 import pygame, math
 from cl3d import main
 
-
-
 h = 350
 w = 525
 

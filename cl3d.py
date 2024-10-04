@@ -411,7 +411,7 @@ class main:
         for coord in tex_coords:
             self.texc.append([coord[0], coord[1],0,0])
         np_texc = np.array(self.texc, dtype=np.float32)
-        print(self.texc)
+        #print(self.texc)
         self.tex_coords = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_texc)
         
         for vert in self.np_points:
@@ -420,7 +420,7 @@ class main:
         for v in vertices:
             points.append((v[0], v[1], v[2], 1.0))
         self.np_points = np.array(points, dtype=np.float32)
-        print(self.np_points.shape)
+        #print(self.np_points.shape)
         
         c = [(255, 100, 100, 255),
                    (255, 100, 100, 255),
@@ -439,7 +439,7 @@ class main:
             colours.append(colour)
         for colour in self.np_colours:
             colours.append(colour)
-        print(colours)
+        #print(colours)
         self.np_colours = np.array(colours, dtype="uint")
         self.cl_colours = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_colours)
         

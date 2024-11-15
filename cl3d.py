@@ -130,18 +130,29 @@ class main:
             return 1/z;
         }
         
-        uint4 texture_pixel(int2 pos, int i, read_only image2d_t tex, __global float3 *mats)
+        uint4 texture_pixel(int2 pos, int i, float z, read_only image2d_t tex, __global float4 *tex_coords, __global float4 *tris)
         {
-            float3 mat4[3];
-            float2 px = (float2)(convert_float(pos.x),convert_float(pos.y));
-                                
-            mat4[0] = (float3)(px.x, 0, 1);
-            mat4[1] = (float3)(px.y, 0, 1);
-            mat4[2] = (float3)(1, 1, 1);
+            float4 p1 = tris[i];
+            float4 p2 = tris[i+1];
+            float4 p3 = tris[i+2];
             
-            px = (float2)(dot(mats[i], (float3)(mat4[0].x, mat4[1].x, mat4[2].x)), dot(mats[i+1], (float3)(mat4[0].x, mat4[1].x, mat4[2].x)));
+            float2 px = (float2)(convert_float(pos.x),convert_float(pos.y));
+            float3 bary = barycentric(px, p1, p2, p3);
+            
+            float2 st0 = (float2)(tex_coords[i].x, tex_coords[i].y);
+            float2 st1 = (float2)(tex_coords[i+1].x, tex_coords[i+1].y);
+            float2 st2 = (float2)(tex_coords[i+2].x, tex_coords[i+2].y);
+            
+            st0[0] /= p1.w, st0[1] /= p1.w;
+            st1[0] /= p2.w, st1[1] /= p2.w;
+            st2[0] /= p3.w, st2[1] /= p3.w;
+            
+            float x = bary.x * st0[0] + bary.y * st1[0] + bary.z * st2[0];
+            float y = bary.x * st0[1] + bary.y * st1[1] + bary.z * st2[1];
+            x *= z, y *= z;
+            
             const sampler_t sampler =  CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP_TO_EDGE | CLK_FILTER_NEAREST;
-            return read_imageui(tex, sampler, px);
+            return read_imageui(tex, sampler, (float2)(x, y));
         }
         
         __kernel void vertex(__global const float4 *points,
@@ -214,7 +225,7 @@ class main:
                         test_pixel_depth = pixel_depth(pos, tris[i], tris[i+1], tris[i+2]);
                         if(test_pixel_depth < old_pixel_depth)
                         {
-                            write_imageui(screen, pos, texture_pixel(pos, i, tex, mats));
+                            write_imageui(screen, pos, texture_pixel(pos, i, test_pixel_depth, tex, tex_coords, tris));
                             old_pixel_depth = test_pixel_depth;
                         }
                     }

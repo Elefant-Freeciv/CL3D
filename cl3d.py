@@ -105,13 +105,29 @@ class main:
             return sqrt(pow((p2.x-p1.x), 2)+pow((p2.y-p1.y), 2));
         }
         
+        float3 barycentric(float2 px, float4 a, float4 b, float4 c)
+        {
+            float u, v, w;
+            float4 p = (float4)(px.x, px.y, 0, 0);
+            float4 v0 = b - a, v1 = c - a, v2 = p - a;
+            float d00 = dot(v0, v0);
+            float d01 = dot(v0, v1);
+            float d11 = dot(v1, v1);
+            float d20 = dot(v2, v0);
+            float d21 = dot(v2, v1);
+            float denom = d00 * d11 - d01 * d01;
+            v = (d11 * d20 - d01 * d21) / denom;
+            w = (d00 * d21 - d01 * d20) / denom;
+            u = 1.0f - v - w;
+            return (float3)(u, v, w);
+        }
+        
         float pixel_depth(int2 pos, float4 p1, float4 p2, float4 p3)
         {
-            float A = p1.y * (p2.w-p3.w) + p2.y * (p3.w-p1.w) + p3.y * (p1.w-p2.w);
-            float B = p1.w * (p2.x-p3.x) + p2.w * (p3.x-p1.x) + p3.w * (p1.x-p2.x);
-            float C = p1.x * (p2.y-p3.y) + p2.x * (p3.y-p1.y) + p3.x * (p1.y-p2.y);
-            float D = -p1.x * (p2.y*p3.w - p3.y*p2.w) - p2.x * (p3.y*p1.w - p1.y*p3.w) - p3.x * (p1.y*p2.w - p2.y*p1.w);
-            return ((A * convert_float(pos.x))+(B * convert_float(pos.y))+D)/-C;
+            float2 px = (float2)(convert_float(pos.x),convert_float(pos.y));
+            float3 bary = barycentric(px, p1, p2, p3);
+            float z = bary.x * 1/p1.w + bary.y * 1/p2.w + bary.z * 1/p3.w;
+            return 1/z;
         }
         
         uint4 texture_pixel(int2 pos, int i, read_only image2d_t tex, __global float3 *mats)
@@ -137,7 +153,7 @@ class main:
             int gid = get_global_id(0);
             //run custom vertex code
             workvec = mul(mat, points[gid]);
-            //workvec.w = -workvec.z;
+            workvec.w = -workvec.z;
             workvec = (float4)(workvec.x / workvec.w, workvec.y / workvec.w, workvec.z / workvec.w, -workvec.z);
             float x = ((workvec.x + 1) / 2) * screen[0].x;
             float y = ((-workvec.y + 1) / 2) * screen[0].y;

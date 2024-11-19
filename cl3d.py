@@ -241,22 +241,32 @@ class main:
         }
         
         __kernel void draw_tris(
-            __global const float4 *tris, __global const float4 *tex_coords, uint pcount, __global const uint4 *colours, read_only image2d_t tex, write_only image2d_t screen)
+            __global const float4 *tris,
+            __global const float4 *tex_coords,
+            uint pcount,
+            __global const uint4 *colours,
+            __global tile_layer *tile_maps,
+            __global tile_layer tri_count,
+            read_only image2d_t tex,
+            write_only image2d_t screen,
+            uint tilesizex,
+            uint tilesizey)
             {
                 const sampler_t sampler =  CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP_TO_EDGE | CLK_FILTER_NEAREST;
+                int2 tile = (int2)(get_global_id(0)/tilesizey, get_global_id(1)/tilesizex);
                 int2 pos = (int2)(get_global_id(0), get_global_id(1));
-                write_imageui(screen, pos, (uint4)(255,255,255,255));//(uint4)(pos.x,pos.y,convert_int(tris[0].x),255));
+                write_imageui(screen, pos, (uint4)(tile.x*25,tile.y*25,255,255));//(uint4)(pos.x,pos.y,convert_int(tris[0].x),255));
                 float old_pixel_depth = 100000;
                 float test_pixel_depth;
-                for (int i = 0; i<pcount; i += 3)
+                for (int i = 0; i<(tri_count[tile.y][tile.x]*3); i += 3)
                 {
                     
-                    if(point_in_triangle(pos, tris[i], tris[i+1], tris[i+2]))
+                    if(point_in_triangle(pos, tris[tile_maps[i/3][tile.y][tile.x]*3], tris[tile_maps[i/3][tile.y][tile.x]*3+1], tris[tile_maps[i/3][tile.y][tile.x]*3+2]))
                     {
-                        test_pixel_depth = pixel_depth(pos, tris[i], tris[i+1], tris[i+2]);
+                        test_pixel_depth = pixel_depth(pos, tris[tile_maps[i/3][tile.y][tile.x]*3], tris[tile_maps[i/3][tile.y][tile.x]*3+1], tris[tile_maps[i/3][tile.y][tile.x]*3+2]);
                         if(test_pixel_depth < old_pixel_depth)
                         {
-                            uint4 colour = texture_pixel(pos, i, test_pixel_depth, tex, tex_coords, tris);
+                            uint4 colour = texture_pixel(pos, tile_maps[i/3][tile.y][tile.x]*3, test_pixel_depth, tex, tex_coords, tris);
                             // custom fragment shader here
                             //colour /= (convert_uint(test_pixel_depth*10));
                             //printf("[%f]", test_pixel_depth);
@@ -560,9 +570,9 @@ class main:
         self.make_tiles1(self.queue, (self.np_points.shape[0], x, y), None, self.cl_out, self.cl_tile_maps, self.cl_tile_layers, tilesizex, tilesizey)
         self.make_tiles2(self.queue, (x,y), None, self.cl_tile_maps, self.cl_tile_layers, self.cl_tile_layer, cl.cltypes.uint(self.np_points.shape[0]))
         
-        np_out = np.empty((self.np_points.shape[0], x, y), dtype=np.int32)
-        cl.enqueue_copy(self.queue, np_out, self.cl_tile_layers)
-        print(np_out)
+#         np_out = np.empty((self.np_points.shape[0], x, y), dtype=np.int32)
+#         cl.enqueue_copy(self.queue, np_out, self.cl_tile_layers)
+#         print(np_out)
         
 #         np_out = np.empty((x, y), dtype=np.int32)
 #         cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
@@ -570,7 +580,7 @@ class main:
 
         self.fmt = cl.ImageFormat(cl.channel_order.RGBA, cl.channel_type.UNSIGNED_INT8)
         self.dest_buf = cl.Image(self.ctx, cl.mem_flags.WRITE_ONLY, self.fmt, shape=(self.h, self.w))
-        self.prg.draw_tris(self.queue, (self.h, self.w), None, self.cl_out, self.tex_coords, cl.cltypes.uint(self.np_points.shape[0]), self.cl_colours, self.tex, self.dest_buf).wait()
+        self.prg.draw_tris(self.queue, (self.h, self.w), None, self.cl_out, self.tex_coords, cl.cltypes.uint(self.np_points.shape[0]), self.cl_colours, self.cl_tile_layers, self.cl_tile_layer, self.tex, self.dest_buf, tilesizex, tilesizey).wait()
         self.dest = np.empty((self.w,self.h,4), dtype="uint8")
         cl.enqueue_copy(self.queue, self.dest, self.dest_buf, origin=(0, 0), region=(self.h, self.w))
 

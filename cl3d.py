@@ -1,5 +1,6 @@
 import pyopencl as cl
 import pygame, math
+import multiprocessing
 
 import numpy as np
 from multiprocessing import Process
@@ -74,6 +75,9 @@ class main:
         self.ctx = cl.create_some_context()
         self.queue = cl.CommandQueue(self.ctx)
         self.prg = cl.Program(self.ctx, '''//CL//
+
+        typedef uint tile_layer[10][7];
+        
         float4 mul(__global const float4 mat[4], const float4 point)
         {
             float4 rtn;
@@ -98,6 +102,17 @@ class main:
         {
             float2 pt = (float2)(convert_float(pos.x),convert_float(pos.y));
             return ((orient(v1, v2, pt) && orient(v2, v3, pt) && orient(v3, v1, pt))||(!orient(v1, v2, pt) && !orient(v2, v3, pt) && !orient(v3, v1, pt)));
+        }
+        
+        bool lines_intersect(float4 p1, float4 p2, int4 tilerect)
+        {
+            float2 p3 = (float2)(convert_float(tilerect.x), convert_float(tilerect.y));
+            float2 p4 = (float2)(convert_float(tilerect.z), convert_float(tilerect.w));
+            float d = p4.x*p3.y - p3.x*p4.y;
+            float s = (1/d)*((p1.x - p2.x)*p3.y - (p1.y - p2.y)*p3.x);
+            float t = (1/d)*(-(-(p1.x - p2.x)*p4.y + (p1.y - p2.y)*p4.x));
+            if (s <= 1 && s >= 0 && t <= 1 && t >= 0){return true;}
+            else {return false;}
         }
         
         float my_distance(float4 p1, float4 p2)
@@ -171,46 +186,51 @@ class main:
             out[gid] = (float4)(y, x, 0, workvec.w);
         }
         
-        __kernel void make_mats(
-            __global const float4 *tris, __global const float4 *tex_coords, global float3 *mats
-        )
+        __kernel void make_tiles1(
+                                    __global const float4 *tris,
+                                    write_only image2d_array_t bool_map,
+                                    uint tilesizex,
+                                    uint tilesizey
+                                 )
         {
-            int i = get_global_id(0)*3;
-            float4 p1 = tris[i];
-            float4 p2 = tris[i+1];
-            float4 p3 = tris[i+2];
-            float4 P1 = tex_coords[i];
-            float4 P2 = tex_coords[i+1];
-            float4 P3 = tex_coords[i+2];
-            float3 mat1[3];
-            float3 mat2[3];
-            float3 row;
-            float det;
-            /*
-            p1.x p2.x p3.x
-            p1.y p2.y p3.y
-            1    1    1
-            */
-            row = (float3)((p2.y-p3.y), (p1.y-p3.y), (p1.y-p2.y));
-            det = 1/(p1.x*(p2.y-p3.y)-p2.x*(p1.y-p3.y)+p3.x*(p1.y-p2.y));
-            
-            mat1[0] = (float3)((p2.y-p3.y)*det, -(p2.x-p3.x)*det, (p2.x*p3.y-p2.y*p3.x)*det);
-            mat1[1] = (float3)(-(p1.y-p3.y)*det, (p1.x-p3.x)*det, -(p1.x*p3.y-p3.x*p1.y)*det);
-            mat1[2] = (float3)((p1.y-p2.y)*det, -(p1.x-p2.x)*det, (p1.x*p2.y-p2.x*p1.y)*det);
-            
-            mat2[0] = (float3)(P1.x, P2.x, P3.x);
-            mat2[1] = (float3)(P1.y, P2.y, P3.y);
-            
-            mats[i] = (float3)(dot(mat2[0], (float3)(mat1[0].x, mat1[1].x, mat1[2].x)),
-                                dot(mat2[0], (float3)(mat1[0].y, mat1[1].y, mat1[2].y)),
-                                dot(mat2[0], (float3)(mat1[0].z, mat1[1].z, mat1[2].z)));
-            mats[i+1] = (float3)(dot(mat2[1], (float3)(mat1[0].x, mat1[1].x, mat1[2].x)),
-                                dot(mat2[1], (float3)(mat1[0].y, mat1[1].y, mat1[2].y)),
-                                dot(mat2[1], (float3)(mat1[0].z, mat1[1].z, mat1[2].z)));
+            int tri = get_global_id(0);
+            const sampler_t sampler =  CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP_TO_EDGE | CLK_FILTER_NEAREST;
+            float4 p1 = tris[tri];
+            float4 p2 = tris[tri+1];
+            float4 p3 = tris[tri+2];
+            uint2 tilesize = (uint2)(tilesizex, tilesizey);
+            int2 tile = (int2)(get_global_id(1), get_global_id(2));
+            int4 tilerect = (int4)(tile.x*tilesize.x, tile.y*tilesize.y, tile.x*tilesize.x+tilesize.x, tile.y*tilesize.y+tilesize.y);
+            bool a = (p1.x >= tilerect.x && p1.x <= tilerect.z);
+            bool b = (p2.x >= tilerect.x && p2.x <= tilerect.z);
+            bool c = (p1.y >= tilerect.y && p1.y <= tilerect.w);
+            bool d = (p2.y >= tilerect.y && p2.y <= tilerect.w);
+            bool e = (p3.x >= tilerect.x && p3.x <= tilerect.z);
+            bool f = (p3.y >= tilerect.y && p3.y <= tilerect.w);
+            if ((a && c) || (b && d) || (e && f)){write_imageui(bool_map, (int4)(tri, tile.x, tile.y, 0), (uint4)(1,1,1,1));}
+            a = point_in_triangle((int2)(tilerect.x, tilerect.y), p1, p2, p3);
+            b = point_in_triangle((int2)(tilerect.x, tilerect.w), p1, p2, p3);
+            c = point_in_triangle((int2)(tilerect.z, tilerect.y), p1, p2, p3);
+            d = point_in_triangle((int2)(tilerect.z, tilerect.w), p1, p2, p3);
+            if (a || b || c || d){write_imageui(bool_map, (int4)(tri, tile.x, tile.y, 0), (uint4)(1,1,1,1));}
+            a = lines_intersect(p1, p2, tilerect);
+            b = lines_intersect(p2, p3, tilerect);
+            c = lines_intersect(p3, p1, tilerect);
+            if (a || b || c){write_imageui(bool_map, (int4)(tri/3, tile.x, tile.y, 0), (uint4)(1,1,1,1));}
+        }
+        
+        __kernel void make_tiles2(read_only image2d_array_t bool_map, __global tile_layer *out, __global tile_layer tri_count, uint pcount)
+        {
+            int2 tile = (int2)(get_global_id(0), get_global_id(1));
+            for (int i = 0; i<pcount; i++)
+            {
+                if (read_imageui(bool_map, (int4)(i, tile.x, tile.y, 0)).x==1)
+                {out[i][tile.x][tile.y]=i;tri_count[tile.x][tile.y]++;}
+            }
         }
         
         __kernel void draw_tris(
-            __global const float4 *tris, __global const float4 *tex_coords, uint pcount, __global const uint4 *colours, __global float3 *mats, read_only image2d_t tex, write_only image2d_t screen)
+            __global const float4 *tris, __global const float4 *tex_coords, uint pcount, __global const uint4 *colours, read_only image2d_t tex, write_only image2d_t screen)
             {
                 const sampler_t sampler =  CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP_TO_EDGE | CLK_FILTER_NEAREST;
                 int2 pos = (int2)(get_global_id(0), get_global_id(1));
@@ -225,7 +245,11 @@ class main:
                         test_pixel_depth = pixel_depth(pos, tris[i], tris[i+1], tris[i+2]);
                         if(test_pixel_depth < old_pixel_depth)
                         {
-                            write_imageui(screen, pos, texture_pixel(pos, i, test_pixel_depth, tex, tex_coords, tris));
+                            uint4 colour = texture_pixel(pos, i, test_pixel_depth, tex, tex_coords, tris);
+                            // custom fragment shader here
+                            //colour /= (convert_uint(test_pixel_depth*10));
+                            //printf("[%f]", test_pixel_depth);
+                            write_imageui(screen, pos, colour);
                             old_pixel_depth = test_pixel_depth;
                         }
                     }
@@ -288,10 +312,10 @@ class main:
         self.cl_screen = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_screen)
         self.cl_out = cl.Buffer(self.ctx, mf.WRITE_ONLY, self.np_points.nbytes)
         print(len(vertices))
-        self.np_mats = np.array((len(vertices), 3), dtype=np.float32)
-        self.mats = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.np_mats)
         
         self.vertex_shader = self.prg.vertex
+        self.make_tiles1 = self.prg.make_tiles1
+        self.make_tiles2 = self.prg.make_tiles2
         
         
     def update(self, delta):
@@ -474,6 +498,15 @@ class main:
         rgb[:,:,2] = b * a + (1.0 - a) * B
 
         return np.asarray( rgb, dtype='uint8' )
+    
+#     def make_tiles(self, tile_size):
+#         np_tris = np.empty_like(self.cl_out)
+#         cl.enqueue_copy(queue, np_tris, self.cl_out)
+#         p = multiprocessing.Pool()
+#         tiles = []
+#         result = p.map(tri_tiles, tiles)
+#         
+#     def tri_tiles(n, tris, tile_size)
         
     def render(self, render_surface, font):
         np_model = np.eye(4, dtype=np.float32)
@@ -504,15 +537,27 @@ class main:
         self.cl_model = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_model)
         self.cl_out = cl.Buffer(self.ctx, mf.READ_WRITE, self.np_points.nbytes)
         
-        self.mats = cl.Buffer(self.ctx, mf.READ_WRITE, self.np_points.nbytes)
-        
         self.vertex_shader(self.queue, (self.np_points.shape[0],), None, self.cl_points, self.cl_view, self.cl_screen, self.cl_out)
-        
-        self.prg.make_mats(self.queue, (int(self.np_points.shape[0]/3),), None, self.cl_out, self.tex_coords, self.mats)
+
+        y = round(self.h / 100)
+        x = round(self.w / 100)
+        tilesizex = cl.cltypes.uint(self.w/x)
+        tilesizey = cl.cltypes.uint(self.h/y)
+        self.fmt = cl.ImageFormat(cl.channel_order.A, cl.channel_type.UNSIGNED_INT8)
+        size = (x, y, self.np_points.shape[0])
+        self.cl_tile_maps = cl.Image(self.ctx, cl.mem_flags.READ_WRITE, self.fmt, shape=size, is_array=True)
+        self.cl_tile_layer = cl.Buffer(self.ctx, mf.READ_WRITE, (4*y*x))
+        self.cl_tile_layers = cl.Buffer(self.ctx, mf.READ_WRITE, (4*y*x*self.np_points.shape[0]))
+        self.make_tiles1(self.queue, (self.np_points.shape[0], x, y), None, self.cl_out, self.cl_tile_maps, tilesizex, tilesizey)
+        self.make_tiles2(self.queue, (x,y), None, self.cl_tile_maps, self.cl_tile_layers, self.cl_tile_layer, cl.cltypes.uint(self.np_points.shape[0]))
+        np_out = np.empty((x, y), dtype=cl.cltypes.uint)
+        cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
+        print(np_out)
+
 
         self.fmt = cl.ImageFormat(cl.channel_order.RGBA, cl.channel_type.UNSIGNED_INT8)
         self.dest_buf = cl.Image(self.ctx, cl.mem_flags.WRITE_ONLY, self.fmt, shape=(self.h, self.w))
-        self.prg.draw_tris(self.queue, (self.h, self.w), None, self.cl_out, self.tex_coords, cl.cltypes.uint(self.np_points.shape[0]), self.cl_colours, self.mats, self.tex, self.dest_buf).wait()
+        self.prg.draw_tris(self.queue, (self.h, self.w), None, self.cl_out, self.tex_coords, cl.cltypes.uint(self.np_points.shape[0]), self.cl_colours, self.tex, self.dest_buf).wait()
         self.dest = np.empty((self.w,self.h,4), dtype="uint8")
         cl.enqueue_copy(self.queue, self.dest, self.dest_buf, origin=(0, 0), region=(self.h, self.w))
 

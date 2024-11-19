@@ -76,7 +76,7 @@ class main:
         self.queue = cl.CommandQueue(self.ctx)
         self.prg = cl.Program(self.ctx, '''//CL//
 
-        typedef uint tile_layer[10][7];
+        typedef int tile_layer[10][7];
         
         float4 mul(__global const float4 mat[4], const float4 point)
         {
@@ -188,18 +188,22 @@ class main:
         
         __kernel void make_tiles1(
                                     __global const float4 *tris,
-                                    write_only image2d_array_t bool_map,
+                                    __global tile_layer *bool_map,
+                                    __global tile_layer *tile_layers,
                                     uint tilesizex,
                                     uint tilesizey
                                  )
         {
-            int tri = get_global_id(0);
+            int tri = get_global_id(0)*3;
             const sampler_t sampler =  CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP_TO_EDGE | CLK_FILTER_NEAREST;
             float4 p1 = tris[tri];
             float4 p2 = tris[tri+1];
             float4 p3 = tris[tri+2];
             uint2 tilesize = (uint2)(tilesizex, tilesizey);
             int2 tile = (int2)(get_global_id(1), get_global_id(2));
+            //printf("[%i|%i|%i|%i|%i]", tile.x, tile.y, tilesize.x, tilesize.y, tri);
+            bool_map[tri/3][tile.x][tile.y] = 0;
+            tile_layers[tri/3][tile.x][tile.y] = 0;
             int4 tilerect = (int4)(tile.x*tilesize.x, tile.y*tilesize.y, tile.x*tilesize.x+tilesize.x, tile.y*tilesize.y+tilesize.y);
             bool a = (p1.x >= tilerect.x && p1.x <= tilerect.z);
             bool b = (p2.x >= tilerect.x && p2.x <= tilerect.z);
@@ -207,25 +211,32 @@ class main:
             bool d = (p2.y >= tilerect.y && p2.y <= tilerect.w);
             bool e = (p3.x >= tilerect.x && p3.x <= tilerect.z);
             bool f = (p3.y >= tilerect.y && p3.y <= tilerect.w);
-            if ((a && c) || (b && d) || (e && f)){write_imageui(bool_map, (int4)(tri, tile.x, tile.y, 0), (uint4)(1,1,1,1));}
+            if ((a && c) || (b && d) || (e && f)){bool_map[tri/3][tile.x][tile.y] = 1;}
             a = point_in_triangle((int2)(tilerect.x, tilerect.y), p1, p2, p3);
             b = point_in_triangle((int2)(tilerect.x, tilerect.w), p1, p2, p3);
             c = point_in_triangle((int2)(tilerect.z, tilerect.y), p1, p2, p3);
             d = point_in_triangle((int2)(tilerect.z, tilerect.w), p1, p2, p3);
-            if (a || b || c || d){write_imageui(bool_map, (int4)(tri, tile.x, tile.y, 0), (uint4)(1,1,1,1));}
+            if (a || b || c || d){bool_map[tri/3][tile.x][tile.y] = 1;}
             a = lines_intersect(p1, p2, tilerect);
             b = lines_intersect(p2, p3, tilerect);
             c = lines_intersect(p3, p1, tilerect);
-            if (a || b || c){write_imageui(bool_map, (int4)(tri/3, tile.x, tile.y, 0), (uint4)(1,1,1,1));}
+            if (a || b || c){bool_map[tri/3][tile.x][tile.y] = 1;}
         }
         
-        __kernel void make_tiles2(read_only image2d_array_t bool_map, __global tile_layer *out, __global tile_layer tri_count, uint pcount)
+        __kernel void make_tiles2(__global tile_layer *bool_map, __global tile_layer *out, __global tile_layer tri_count, uint pcount)
         {
             int2 tile = (int2)(get_global_id(0), get_global_id(1));
+            tri_count[tile.x][tile.y]=0;
+            int j = 0;
             for (int i = 0; i<pcount; i++)
             {
-                if (read_imageui(bool_map, (int4)(i, tile.x, tile.y, 0)).x==1)
-                {out[i][tile.x][tile.y]=i;tri_count[tile.x][tile.y]++;}
+                if (bool_map[i][tile.x][tile.y]==1)
+                {
+                    out[j][tile.x][tile.y]=i;
+                    j++;
+                    tri_count[tile.x][tile.y]=j;
+                }
+                else {out[j][tile.x][tile.y]=0;}
             }
         }
         
@@ -543,17 +554,19 @@ class main:
         x = round(self.w / 100)
         tilesizex = cl.cltypes.uint(self.w/x)
         tilesizey = cl.cltypes.uint(self.h/y)
-        self.fmt = cl.ImageFormat(cl.channel_order.A, cl.channel_type.UNSIGNED_INT8)
-        size = (x, y, self.np_points.shape[0])
-        self.cl_tile_maps = cl.Image(self.ctx, cl.mem_flags.READ_WRITE, self.fmt, shape=size, is_array=True)
+        self.cl_tile_maps = cl.Buffer(self.ctx, mf.READ_WRITE, (4*y*x*self.np_points.shape[0]))
         self.cl_tile_layer = cl.Buffer(self.ctx, mf.READ_WRITE, (4*y*x))
         self.cl_tile_layers = cl.Buffer(self.ctx, mf.READ_WRITE, (4*y*x*self.np_points.shape[0]))
-        self.make_tiles1(self.queue, (self.np_points.shape[0], x, y), None, self.cl_out, self.cl_tile_maps, tilesizex, tilesizey)
+        self.make_tiles1(self.queue, (self.np_points.shape[0], x, y), None, self.cl_out, self.cl_tile_maps, self.cl_tile_layers, tilesizex, tilesizey)
         self.make_tiles2(self.queue, (x,y), None, self.cl_tile_maps, self.cl_tile_layers, self.cl_tile_layer, cl.cltypes.uint(self.np_points.shape[0]))
-        np_out = np.empty((x, y), dtype=cl.cltypes.uint)
-        cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
+        
+        np_out = np.empty((self.np_points.shape[0], x, y), dtype=np.int32)
+        cl.enqueue_copy(self.queue, np_out, self.cl_tile_layers)
         print(np_out)
-
+        
+#         np_out = np.empty((x, y), dtype=np.int32)
+#         cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
+#         print(np_out)
 
         self.fmt = cl.ImageFormat(cl.channel_order.RGBA, cl.channel_type.UNSIGNED_INT8)
         self.dest_buf = cl.Image(self.ctx, cl.mem_flags.WRITE_ONLY, self.fmt, shape=(self.h, self.w))
@@ -565,3 +578,5 @@ class main:
         render_surface.blit(surf, (0, 0))
         verts = font.render(str(len(self.np_points)), 1, (0, 0, 0))
         render_surface.blit(verts, (0, 30))
+#         print(4*y*x*self.np_points.shape[0])
+#         cl.enqueue_fill_buffer(self.queue, self.cl_tile_layers, np.int32(-1), 0, self.cl_tile_layers.size)

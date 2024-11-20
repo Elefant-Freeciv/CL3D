@@ -81,7 +81,12 @@ class main:
         self.start_click = []
         self.ctx = cl.create_some_context()
         self.queue = cl.CommandQueue(self.ctx)
-        self.prg = cl.Program(self.ctx, f"typedef int tile_layer[{self.y}][{self.x}];"+'''//CL//
+        self.prg = cl.Program(self.ctx,
+        f'''
+        typedef int tile_layer[{self.y}][{self.x}];
+        typedef uint4 scr_img[{self.h}][{self.w}];
+        typedef uint4 tex_img[256][256];
+        '''+'''//CL//
 
         
         
@@ -158,7 +163,7 @@ class main:
             return 1/z;
         }
         
-        uint4 texture_pixel(int2 pos, int i, float z, read_only image2d_t tex, __global float4 *tex_coords, __global float4 *tris)
+        uint4 texture_pixel(int2 pos, int i, float z, __global tex_img tex, __global float4 *tex_coords, __global float4 *tris)
         {
             float4 p1 = tris[i];
             float4 p2 = tris[i+1];
@@ -179,8 +184,7 @@ class main:
             float y = bary.x * st0[1] + bary.y * st1[1] + bary.z * st2[1];
             x *= z, y *= z;
             
-            const sampler_t sampler =  CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP_TO_EDGE | CLK_FILTER_NEAREST;
-            return read_imageui(tex, sampler, (float2)(x, y));
+            return tex[convert_int(x)][convert_int(y)];
         }
         
         __kernel void vertex(__global const float4 *points,
@@ -208,7 +212,6 @@ class main:
                                  )
         {
             int tri = get_global_id(0)*3;
-            const sampler_t sampler =  CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP_TO_EDGE | CLK_FILTER_NEAREST;
             float4 p1 = tris[tri];
             float4 p2 = tris[tri+1];
             float4 p3 = tris[tri+2];
@@ -263,15 +266,14 @@ class main:
             __global const uint4 *colours,
             __global tile_layer *tile_maps,
             __global tile_layer tri_count,
-            read_only image2d_t tex,
-            write_only image2d_t screen,
+            __global tex_img tex,
+            __global scr_img screen,
             uint tilesizex,
             uint tilesizey)
             {
-                const sampler_t sampler =  CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP_TO_EDGE | CLK_FILTER_NEAREST;
                 int2 pos = (int2)(get_global_id(0), get_global_id(1));
                 int2 tile = (int2)(pos.x/tilesizex, pos.y/tilesizey);
-                write_imageui(screen, pos, (uint4)(255,255,255,255));//(tile.x*2.5,tile.y*2.5,255,255));//(uint4)(pos.x,pos.y,convert_int(tris[0].x),255));
+                screen[pos.x][pos.y] = (uint4)(255,255,255,255);//(tile.x*2.5,tile.y*2.5,255,255));//(uint4)(pos.x,pos.y,convert_int(tris[0].x),255));
                 float old_pixel_depth = 100000;
                 float test_pixel_depth;
                 for (int i = 0; i<(tri_count[tile.x][tile.y]*3); i += 3)
@@ -285,7 +287,7 @@ class main:
                             uint4 colour = texture_pixel(pos, tile_maps[i/3][tile.x][tile.y]*3, test_pixel_depth, tex, tex_coords, tris);
                             // custom fragment shader here
                             //colour /= (convert_uint(test_pixel_depth*10));
-                            write_imageui(screen, pos, colour);
+                            screen[pos.x][pos.y] = colour;
                             old_pixel_depth = test_pixel_depth;
                         }
                     }
@@ -338,10 +340,11 @@ class main:
                  [0.0, 0.0, 1.0, 1.0],
                  [0.0, 0.0, 0.0, 1.0]]
         np_model = np.array(model, dtype=np.float32)
-        print(np_model)
+#         print(np_model)
         self.src_img = Image.open('Tex2.png').convert('RGBA')
-        self.src = np.array(self.src_img)
-        self.tex = cl.image_from_array(self.ctx, self.src, 4)
+        self.src = np.array(self.src_img, dtype=cl.cltypes.uint)
+        print(self.src.shape)
+        self.tex = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.src)
         
         np_screen = np.array([[self.w, self.h]], dtype=np.float32)
 
@@ -573,13 +576,14 @@ class main:
 #         np_out = np.empty((self.y, self.x), dtype=np.int32)
 #         cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
 
-        self.fmt = cl.ImageFormat(cl.channel_order.RGBA, cl.channel_type.UNSIGNED_INT8)
-        self.dest_buf = cl.Image(self.ctx, cl.mem_flags.WRITE_ONLY, self.fmt, shape=(self.h, self.w))
+        self.dest = np.empty((self.h,self.w,4), dtype=cl.cltypes.uint)
+        self.dest_buf = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.dest)
         self.prg.draw_tris(self.queue, (self.h, self.w), None, self.cl_out, self.tex_coords, cl.cltypes.uint(self.np_points.shape[0]), self.cl_colours, self.cl_tile_layers, self.cl_tile_layer, self.tex, self.dest_buf, self.tilesizey, self.tilesizex).wait()
-        self.dest = np.empty((self.w,self.h,4), dtype="uint8")
-        cl.enqueue_copy(self.queue, self.dest, self.dest_buf, origin=(0, 0), region=(self.h, self.w))
+        cl.enqueue_copy(self.queue, self.dest, self.dest_buf)
 
         surf = pygame.surfarray.make_surface(self.dest[:,:,:3])
+        surf = pygame.transform.rotate(surf, 90)
+        surf = pygame.transform.flip(surf, False, True)
         render_surface.blit(surf, (0, 0))
         verts = font.render(str(len(self.np_points)), 1, (0, 0, 0))
         render_surface.blit(verts, (0, 30))

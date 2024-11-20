@@ -18,7 +18,7 @@ while r == True:
     render_surface.fill((255, 255, 255))
     m.render(render_surface, font)
     main_screen.blit(render_surface, (0, 0))
-    main_screen.blit(fps, (0, 0))
+    main_screen.blit(fps, (0, 15))
     pygame.display.flip()
     pressed_keys = pygame.key.get_pressed()
     events = pygame.event.get()

@@ -3,7 +3,6 @@ import pygame, math
 import multiprocessing
 
 import numpy as np
-from multiprocessing import Process
 from PIL import Image
 
 def sort(points):
@@ -199,19 +198,19 @@ class main:
             float4 p1 = tris[tri];
             float4 p2 = tris[tri+1];
             float4 p3 = tris[tri+2];
-            uint2 tilesize = (uint2)(tilesizex, tilesizey);
-            int2 tile = (int2)(get_global_id(1), get_global_id(2));
-            //printf("[%i|%i|%i|%i|%i]", tile.x, tile.y, tilesize.x, tilesize.y, tri);
+            uint2 tilesize = (uint2)(tilesizey, tilesizex);
+            int2 tile = (int2)(get_global_id(2), get_global_id(1));
             bool_map[tri/3][tile.x][tile.y] = 0;
             tile_layers[tri/3][tile.x][tile.y] = 0;
             int4 tilerect = (int4)(tile.x*tilesize.x, tile.y*tilesize.y, tile.x*tilesize.x+tilesize.x, tile.y*tilesize.y+tilesize.y);
             bool a = (p1.x >= tilerect.x && p1.x <= tilerect.z);
-            bool b = (p2.x >= tilerect.x && p2.x <= tilerect.z);
-            bool c = (p1.y >= tilerect.y && p1.y <= tilerect.w);
+            bool b = (p1.y >= tilerect.y && p1.y <= tilerect.w);
+            printf("[%i|%i|%i|%i|%i|%i]", tilerect.x, tilerect.y, tilesize.x, tilesize.y, a, b);
+            bool c = (p2.x >= tilerect.x && p2.x <= tilerect.z);
             bool d = (p2.y >= tilerect.y && p2.y <= tilerect.w);
             bool e = (p3.x >= tilerect.x && p3.x <= tilerect.z);
             bool f = (p3.y >= tilerect.y && p3.y <= tilerect.w);
-            if ((a && c) || (b && d) || (e && f)){bool_map[tri/3][tile.x][tile.y] = 1;}
+            if ((a && b) || (c && d) || (e && f)){bool_map[tri/3][tile.x][tile.y] = 1;}
             a = point_in_triangle((int2)(tilerect.x, tilerect.y), p1, p2, p3);
             b = point_in_triangle((int2)(tilerect.x, tilerect.w), p1, p2, p3);
             c = point_in_triangle((int2)(tilerect.z, tilerect.y), p1, p2, p3);
@@ -228,7 +227,7 @@ class main:
             int2 tile = (int2)(get_global_id(0), get_global_id(1));
             tri_count[tile.x][tile.y]=0;
             int j = 0;
-            for (int i = 0; i<pcount; i++)
+            for (int i = 0; i<(pcount/3); i++)
             {
                 if (bool_map[i][tile.x][tile.y]==1)
                 {
@@ -253,8 +252,8 @@ class main:
             uint tilesizey)
             {
                 const sampler_t sampler =  CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP_TO_EDGE | CLK_FILTER_NEAREST;
-                int2 tile = (int2)(get_global_id(0)/tilesizey, get_global_id(1)/tilesizex);
                 int2 pos = (int2)(get_global_id(0), get_global_id(1));
+                int2 tile = (int2)(pos.x/tilesizey, pos.y/tilesizex);
                 write_imageui(screen, pos, (uint4)(tile.x*25,tile.y*25,255,255));//(uint4)(pos.x,pos.y,convert_int(tris[0].x),255));
                 float old_pixel_depth = 100000;
                 float test_pixel_depth;
@@ -519,15 +518,6 @@ class main:
         rgb[:,:,2] = b * a + (1.0 - a) * B
 
         return np.asarray( rgb, dtype='uint8' )
-    
-#     def make_tiles(self, tile_size):
-#         np_tris = np.empty_like(self.cl_out)
-#         cl.enqueue_copy(queue, np_tris, self.cl_out)
-#         p = multiprocessing.Pool()
-#         tiles = []
-#         result = p.map(tri_tiles, tiles)
-#         
-#     def tri_tiles(n, tris, tile_size)
         
     def render(self, render_surface, font):
         np_model = np.eye(4, dtype=np.float32)
@@ -564,18 +554,19 @@ class main:
         x = round(self.w / 100)
         tilesizex = cl.cltypes.uint(self.w/x)
         tilesizey = cl.cltypes.uint(self.h/y)
-        self.cl_tile_maps = cl.Buffer(self.ctx, mf.READ_WRITE, (4*y*x*self.np_points.shape[0]))
+        mapsize = int(self.np_points.shape[0]/3)
+        self.cl_tile_maps = cl.Buffer(self.ctx, mf.READ_WRITE, (4*y*x*mapsize))
         self.cl_tile_layer = cl.Buffer(self.ctx, mf.READ_WRITE, (4*y*x))
-        self.cl_tile_layers = cl.Buffer(self.ctx, mf.READ_WRITE, (4*y*x*self.np_points.shape[0]))
-        self.make_tiles1(self.queue, (self.np_points.shape[0], x, y), None, self.cl_out, self.cl_tile_maps, self.cl_tile_layers, tilesizex, tilesizey)
+        self.cl_tile_layers = cl.Buffer(self.ctx, mf.READ_WRITE, (4*y*x*mapsize))
+        self.make_tiles1(self.queue, (mapsize, x, y), None, self.cl_out, self.cl_tile_maps, self.cl_tile_layers, tilesizex, tilesizey)
         self.make_tiles2(self.queue, (x,y), None, self.cl_tile_maps, self.cl_tile_layers, self.cl_tile_layer, cl.cltypes.uint(self.np_points.shape[0]))
         
 #         np_out = np.empty((self.np_points.shape[0], x, y), dtype=np.int32)
 #         cl.enqueue_copy(self.queue, np_out, self.cl_tile_layers)
 #         print(np_out)
         
-#         np_out = np.empty((x, y), dtype=np.int32)
-#         cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
+        np_out = np.empty((x, y), dtype=np.int32)
+        cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
 #         print(np_out)
 
         self.fmt = cl.ImageFormat(cl.channel_order.RGBA, cl.channel_type.UNSIGNED_INT8)
@@ -588,5 +579,8 @@ class main:
         render_surface.blit(surf, (0, 0))
         verts = font.render(str(len(self.np_points)), 1, (0, 0, 0))
         render_surface.blit(verts, (0, 30))
+        for i in range(x):
+            for j in range(y):
+                render_surface.blit(font.render(str(np_out[i][j]), 1, (0, 0, 0)), (i*tilesizex, j*tilesizey))
 #         print(4*y*x*self.np_points.shape[0])
 #         cl.enqueue_fill_buffer(self.queue, self.cl_tile_layers, np.int32(-1), 0, self.cl_tile_layers.size)

@@ -70,6 +70,10 @@ class main:
         self.x = round(self.w / target_tile_size)
         self.tilesizex = cl.cltypes.uint(self.w/self.x)
         self.tilesizey = cl.cltypes.uint(self.h/self.y)
+        if (self.tilesizex*self.x)<self.w:
+            self.tilesizex += 1
+        if (self.tilesizey*self.y)<self.h:
+            self.tilesizey += 1
         self.viewpos = [0.0, 0.0, -10.0]
         self.rotation = [0.0, 0.0, 0.0]
         self.delta = 0.0
@@ -107,7 +111,7 @@ class main:
             return ((orient(v1, v2, pt) && orient(v2, v3, pt) && orient(v3, v1, pt))||(!orient(v1, v2, pt) && !orient(v2, v3, pt) && !orient(v3, v1, pt)));
         }
         
-        bool lines_intersect(float4 p1, float4 p2, int4 tilerect)
+        /*bool lines_intersect(float4 p1, float4 p2, int4 tilerect)
         {
             float2 p3 = (float2)(convert_float(tilerect.x), convert_float(tilerect.y));
             float2 p4 = (float2)(convert_float(tilerect.z), convert_float(tilerect.w));
@@ -115,6 +119,23 @@ class main:
             float s = (1/d)*((p1.x - p2.x)*p3.y - (p1.y - p2.y)*p3.x);
             float t = (1/d)*(-(-(p1.x - p2.x)*p4.y + (p1.y - p2.y)*p4.x));
             if (s <= 1 && s >= 0 && t <= 1 && t >= 0){return true;}
+            else {return false;}
+        }*/
+        
+        bool lines_intersect(float4 p1, float4 p2, int4 tilerect)
+        {
+            float2 p3 = (float2)(convert_float(tilerect.x), convert_float(tilerect.y));
+            float2 p4 = (float2)(convert_float(tilerect.z), convert_float(tilerect.w));
+            float m1 = (p3.y-p4.y)/(p3.x-p4.x);
+            float m2 = (p1.y-p2.y)/(p1.x-p2.x);
+            float b1 = -m1*p3.x+p3.y;
+            float b2 = -m2*p1.x+p1.y;
+            float x = (b2-b1)/(m1-m2);
+            float y = m1*x+b1;
+            bool a = (x >= p3.x && x <= p4.x);
+            bool b = (y >= min(p3.y, p4.y) && y <= max(p4.y, p3.y));
+            bool c = (x >= min(p1.x, p2.x) && x <= max(p1.x, p2.x));
+            if (a && b && c){return true;}
             else {return false;}
         }
         
@@ -206,24 +227,28 @@ class main:
             int2 tile = (int2)(get_global_id(1), get_global_id(2));
             bool_map[tri/3][tile.x][tile.y] = 0;
             tile_layers[tri/3][tile.x][tile.y] = 0;
+            bool a, b, c, d, e, f; 
             int4 tilerect = (int4)(tile.x*tilesize.x, tile.y*tilesize.y, tile.x*tilesize.x+tilesize.x, tile.y*tilesize.y+tilesize.y);
             //int4 tilerect = (int4)(tile.y*tilesize.y, tile.x*tilesize.x, tile.y*tilesize.y+tilesize.y, tile.x*tilesize.x+tilesize.x);
-            bool a = (p1.x >= tilerect.x && p1.x <= tilerect.z);
-            bool b = (p1.y >= tilerect.y && p1.y <= tilerect.w);
-            bool c = (p2.x >= tilerect.x && p2.x <= tilerect.z);
-            bool d = (p2.y >= tilerect.y && p2.y <= tilerect.w);
-            bool e = (p3.x >= tilerect.x && p3.x <= tilerect.z);
-            bool f = (p3.y >= tilerect.y && p3.y <= tilerect.w);
+            a = (p1.x >= tilerect.x && p1.x <= tilerect.z);
+            b = (p1.y >= tilerect.y && p1.y <= tilerect.w);
+            c = (p2.x >= tilerect.x && p2.x <= tilerect.z);
+            d = (p2.y >= tilerect.y && p2.y <= tilerect.w);
+            e = (p3.x >= tilerect.x && p3.x <= tilerect.z);
+            f = (p3.y >= tilerect.y && p3.y <= tilerect.w);
             if ((a && b) || (c && d) || (e && f)){bool_map[tri/3][tile.x][tile.y] = 1;}
             a = point_in_triangle((int2)(tilerect.x, tilerect.y), p1, p2, p3);
             b = point_in_triangle((int2)(tilerect.x, tilerect.w), p1, p2, p3);
             c = point_in_triangle((int2)(tilerect.z, tilerect.y), p1, p2, p3);
             d = point_in_triangle((int2)(tilerect.z, tilerect.w), p1, p2, p3);
             if (a || b || c || d){bool_map[tri/3][tile.x][tile.y] = 1;}
-            /*a = lines_intersect(p1, p2, tilerect);
+            a = lines_intersect(p1, p2, tilerect);
             b = lines_intersect(p2, p3, tilerect);
             c = lines_intersect(p3, p1, tilerect);
-            if (a || b || c){bool_map[tri/3][tile.x][tile.y] = 1;}*/
+            d = lines_intersect(p1, p2, (int4)(tilerect.x,tilerect.w,tilerect.z,tilerect.y));
+            e = lines_intersect(p2, p3, (int4)(tilerect.x,tilerect.w,tilerect.z,tilerect.y));
+            f = lines_intersect(p3, p1, (int4)(tilerect.x,tilerect.w,tilerect.z,tilerect.y));
+            if (a || b || c || d || e || f){bool_map[tri/3][tile.x][tile.y] = 1;}
             //printf("[%i|%i|%i|%i|%i|%i]", tile.x, tile.y, tilesize.x, tilesize.y, a, b);
         }
         

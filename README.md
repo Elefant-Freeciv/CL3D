@@ -1,2 +1,2 @@
 An OpenCL rewrite of Plane3D. Features GPU acceleration, a real time interface, and texturing.
-Uses tiled rendering for better performance. 😂😭
+Uses tiled rendering for better performance. Doesn't require image functionality for compatibilty with a wider range of hardware.

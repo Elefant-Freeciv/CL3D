@@ -75,7 +75,7 @@ class main:
         self.queue = cl.CommandQueue(self.ctx)
         self.prg = cl.Program(self.ctx, '''//CL//
 
-        typedef int tile_layer[10][7];
+        typedef int tile_layer[7][10];
         
         float4 mul(__global const float4 mat[4], const float4 point)
         {
@@ -198,15 +198,14 @@ class main:
             float4 p1 = tris[tri];
             float4 p2 = tris[tri+1];
             float4 p3 = tris[tri+2];
-            uint2 tilesize = (uint2)(tilesizey, tilesizex);
-            int2 tile = (int2)(get_global_id(2), get_global_id(1));
+            uint2 tilesize = (uint2)(tilesizex, tilesizey);
+            int2 tile = (int2)(get_global_id(1), get_global_id(2));
             bool_map[tri/3][tile.x][tile.y] = 0;
             tile_layers[tri/3][tile.x][tile.y] = 0;
-            //int4 tilerect = (int4)(tile.x*tilesize.x, tile.y*tilesize.y, tile.x*tilesize.x+tilesize.x, tile.y*tilesize.y+tilesize.y);
-            int4 tilerect = (int4)(tile.y*tilesize.y, tile.x*tilesize.x, tile.y*tilesize.y+tilesize.y, tile.x*tilesize.x+tilesize.x);
+            int4 tilerect = (int4)(tile.x*tilesize.x, tile.y*tilesize.y, tile.x*tilesize.x+tilesize.x, tile.y*tilesize.y+tilesize.y);
+            //int4 tilerect = (int4)(tile.y*tilesize.y, tile.x*tilesize.x, tile.y*tilesize.y+tilesize.y, tile.x*tilesize.x+tilesize.x);
             bool a = (p1.x >= tilerect.x && p1.x <= tilerect.z);
             bool b = (p1.y >= tilerect.y && p1.y <= tilerect.w);
-            //printf("[%i|%i|%i|%i|%i|%i]", tilerect.x, tilerect.y, tilesize.x, tilesize.y, a, b);
             bool c = (p2.x >= tilerect.x && p2.x <= tilerect.z);
             bool d = (p2.y >= tilerect.y && p2.y <= tilerect.w);
             bool e = (p3.x >= tilerect.x && p3.x <= tilerect.z);
@@ -221,11 +220,13 @@ class main:
             b = lines_intersect(p2, p3, tilerect);
             c = lines_intersect(p3, p1, tilerect);
             if (a || b || c){bool_map[tri/3][tile.x][tile.y] = 1;}
+            //printf("[%i|%i|%i|%i|%i|%i]", tile.x, tile.y, tilesize.x, tilesize.y, a, b);
         }
         
         __kernel void make_tiles2(__global tile_layer *bool_map, __global tile_layer *out, __global tile_layer tri_count, uint pcount)
         {
-            int2 tile = (int2)(get_global_id(1), get_global_id(0));
+            int2 tile = (int2)(get_global_id(0), get_global_id(1));
+            //printf("[%i|%i]", tile.x, tile.y);
             tri_count[tile.x][tile.y]=0;
             int j = 0;
             for (int i = 0; i<(pcount/3); i++)
@@ -254,19 +255,20 @@ class main:
             {
                 const sampler_t sampler =  CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP_TO_EDGE | CLK_FILTER_NEAREST;
                 int2 pos = (int2)(get_global_id(0), get_global_id(1));
-                int2 tile = (int2)(pos.x/tilesizey, pos.y/tilesizex);
+                int2 tile = (int2)(pos.x/tilesizex, pos.y/tilesizey);
+                //printf("[%i|%i]", tile.x, tile.y);
                 write_imageui(screen, pos, (uint4)(tile.x*25,tile.y*25,255,255));//(uint4)(pos.x,pos.y,convert_int(tris[0].x),255));
                 float old_pixel_depth = 100000;
                 float test_pixel_depth;
-                for (int i = 0; i<(tri_count[tile.y][tile.x]*3); i += 3)
+                for (int i = 0; i<(tri_count[tile.x][tile.y]*3); i += 3)
                 {
                     
-                    if(point_in_triangle(pos, tris[tile_maps[i/3][tile.y][tile.x]*3], tris[tile_maps[i/3][tile.y][tile.x]*3+1], tris[tile_maps[i/3][tile.y][tile.x]*3+2]))
+                    if(point_in_triangle(pos, tris[tile_maps[i/3][tile.x][tile.y]*3], tris[tile_maps[i/3][tile.x][tile.y]*3+1], tris[tile_maps[i/3][tile.x][tile.y]*3+2]))
                     {
-                        test_pixel_depth = pixel_depth(pos, tris[tile_maps[i/3][tile.y][tile.x]*3], tris[tile_maps[i/3][tile.y][tile.x]*3+1], tris[tile_maps[i/3][tile.y][tile.x]*3+2]);
+                        test_pixel_depth = pixel_depth(pos, tris[tile_maps[i/3][tile.x][tile.y]*3], tris[tile_maps[i/3][tile.x][tile.y]*3+1], tris[tile_maps[i/3][tile.x][tile.y]*3+2]);
                         if(test_pixel_depth < old_pixel_depth)
                         {
-                            uint4 colour = texture_pixel(pos, tile_maps[i/3][tile.y][tile.x]*3, test_pixel_depth, tex, tex_coords, tris);
+                            uint4 colour = texture_pixel(pos, tile_maps[i/3][tile.x][tile.y]*3, test_pixel_depth, tex, tex_coords, tris);
                             // custom fragment shader here
                             //colour /= (convert_uint(test_pixel_depth*10));
                             //printf("[%f]", test_pixel_depth);
@@ -559,20 +561,20 @@ class main:
         self.cl_tile_maps = cl.Buffer(self.ctx, mf.READ_WRITE, (4*y*x*mapsize))
         self.cl_tile_layer = cl.Buffer(self.ctx, mf.READ_WRITE, (4*y*x))
         self.cl_tile_layers = cl.Buffer(self.ctx, mf.READ_WRITE, (4*y*x*mapsize))
-        self.make_tiles1(self.queue, (mapsize, x, y), None, self.cl_out, self.cl_tile_maps, self.cl_tile_layers, tilesizex, tilesizey)
-        self.make_tiles2(self.queue, (x,y), None, self.cl_tile_maps, self.cl_tile_layers, self.cl_tile_layer, cl.cltypes.uint(self.np_points.shape[0]))
+        self.make_tiles1(self.queue, (mapsize, y, x), None, self.cl_out, self.cl_tile_maps, self.cl_tile_layers, tilesizey, tilesizex)
+        self.make_tiles2(self.queue, (y,x), None, self.cl_tile_maps, self.cl_tile_layers, self.cl_tile_layer, cl.cltypes.uint(self.np_points.shape[0]))
         
 #         np_out = np.empty((self.np_points.shape[0], x, y), dtype=np.int32)
 #         cl.enqueue_copy(self.queue, np_out, self.cl_tile_layers)
 #         print(np_out)
         
-        np_out = np.empty((x, y), dtype=np.int32)
+        np_out = np.empty((y, x), dtype=np.int32)
         cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
 #         print(np_out)
 
         self.fmt = cl.ImageFormat(cl.channel_order.RGBA, cl.channel_type.UNSIGNED_INT8)
         self.dest_buf = cl.Image(self.ctx, cl.mem_flags.WRITE_ONLY, self.fmt, shape=(self.h, self.w))
-        self.prg.draw_tris(self.queue, (self.h, self.w), None, self.cl_out, self.tex_coords, cl.cltypes.uint(self.np_points.shape[0]), self.cl_colours, self.cl_tile_layers, self.cl_tile_layer, self.tex, self.dest_buf, tilesizex, tilesizey).wait()
+        self.prg.draw_tris(self.queue, (self.h, self.w), None, self.cl_out, self.tex_coords, cl.cltypes.uint(self.np_points.shape[0]), self.cl_colours, self.cl_tile_layers, self.cl_tile_layer, self.tex, self.dest_buf, tilesizey, tilesizex).wait()
         self.dest = np.empty((self.w,self.h,4), dtype="uint8")
         cl.enqueue_copy(self.queue, self.dest, self.dest_buf, origin=(0, 0), region=(self.h, self.w))
 
@@ -580,6 +582,6 @@ class main:
         render_surface.blit(surf, (0, 0))
         verts = font.render(str(len(self.np_points)), 1, (0, 0, 0))
         render_surface.blit(verts, (0, 30))
-        for i in range(x):
-            for j in range(y):
-                render_surface.blit(font.render(str(np_out[i][j]), 1, (0, 0, 0)), (i*tilesizex, j*tilesizey))
+        for i in range(y):
+            for j in range(x):
+                render_surface.blit(font.render(str(np_out[i][j]), 1, (0, 0, 0)), (j*tilesizex, i*tilesizey))

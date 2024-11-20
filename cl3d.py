@@ -83,6 +83,9 @@ class main:
         self.queue = cl.CommandQueue(self.ctx)
         self.prg = cl.Program(self.ctx,
         f'''
+
+        #define tilesize (uint2)({self.tilesizey}, {self.tilesizex})
+
         typedef int tile_layer[{self.y}][{self.x}];
         typedef uint4 scr_img[{self.h}][{self.w}];
         typedef uint4 tex_img[256][256];
@@ -206,16 +209,13 @@ class main:
         __kernel void make_tiles1(
                                     __global const float4 *tris,
                                     __global tile_layer *bool_map,
-                                    __global tile_layer *tile_layers,
-                                    uint tilesizex,
-                                    uint tilesizey
+                                    __global tile_layer *tile_layers
                                  )
         {
             int tri = get_global_id(0)*3;
             float4 p1 = tris[tri];
             float4 p2 = tris[tri+1];
             float4 p3 = tris[tri+2];
-            uint2 tilesize = (uint2)(tilesizex, tilesizey);
             int2 tile = (int2)(get_global_id(1), get_global_id(2));
             bool_map[tri/3][tile.x][tile.y] = 0;
             tile_layers[tri/3][tile.x][tile.y] = 0;
@@ -267,12 +267,10 @@ class main:
             __global tile_layer *tile_maps,
             __global tile_layer tri_count,
             __global tex_img tex,
-            __global scr_img screen,
-            uint tilesizex,
-            uint tilesizey)
+            __global scr_img screen)
             {
                 int2 pos = (int2)(get_global_id(0), get_global_id(1));
-                int2 tile = (int2)(pos.x/tilesizex, pos.y/tilesizey);
+                int2 tile = (int2)(pos.x/tilesize.x, pos.y/tilesize.y);
                 screen[pos.x][pos.y] = (uint4)(255,255,255,255);//(tile.x*2.5,tile.y*2.5,255,255));//(uint4)(pos.x,pos.y,convert_int(tris[0].x),255));
                 float old_pixel_depth = 100000;
                 float test_pixel_depth;
@@ -570,7 +568,7 @@ class main:
         self.cl_tile_maps = cl.Buffer(self.ctx, mf.READ_WRITE, (4*self.y*self.x*self.mapsize))
         self.cl_tile_layer = cl.Buffer(self.ctx, mf.READ_WRITE, (4*self.y*self.x))
         self.cl_tile_layers = cl.Buffer(self.ctx, mf.READ_WRITE, (4*self.y*self.x*self.mapsize))
-        self.make_tiles1(self.queue, (self.mapsize, self.y, self.x), None, self.cl_out, self.cl_tile_maps, self.cl_tile_layers, self.tilesizey, self.tilesizex)
+        self.make_tiles1(self.queue, (self.mapsize, self.y, self.x), None, self.cl_out, self.cl_tile_maps, self.cl_tile_layers)
         self.make_tiles2(self.queue, (self.y,self.x), None, self.cl_tile_maps, self.cl_tile_layers, self.cl_tile_layer, cl.cltypes.uint(self.np_points.shape[0]))
         
 #         np_out = np.empty((self.y, self.x), dtype=np.int32)
@@ -578,7 +576,7 @@ class main:
 
         self.dest = np.empty((self.h,self.w,4), dtype=cl.cltypes.uint)
         self.dest_buf = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.dest)
-        self.prg.draw_tris(self.queue, (self.h, self.w), None, self.cl_out, self.tex_coords, cl.cltypes.uint(self.np_points.shape[0]), self.cl_colours, self.cl_tile_layers, self.cl_tile_layer, self.tex, self.dest_buf, self.tilesizey, self.tilesizex).wait()
+        self.prg.draw_tris(self.queue, (self.h, self.w), None, self.cl_out, self.tex_coords, cl.cltypes.uint(self.np_points.shape[0]), self.cl_colours, self.cl_tile_layers, self.cl_tile_layer, self.tex, self.dest_buf).wait()
         cl.enqueue_copy(self.queue, self.dest, self.dest_buf)
 
         surf = pygame.surfarray.make_surface(self.dest[:,:,:3])

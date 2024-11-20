@@ -63,9 +63,13 @@ class Math3D:
         return matA
 
 class main:
-    def __init__(self, h, w):
+    def __init__(self, h, w, target_tile_size):
         self.h = h
         self.w = w
+        self.y = round(self.h / target_tile_size)
+        self.x = round(self.w / target_tile_size)
+        self.tilesizex = cl.cltypes.uint(self.w/self.x)
+        self.tilesizey = cl.cltypes.uint(self.h/self.y)
         self.viewpos = [0.0, 0.0, -10.0]
         self.rotation = [0.0, 0.0, 0.0]
         self.delta = 0.0
@@ -73,9 +77,9 @@ class main:
         self.start_click = []
         self.ctx = cl.create_some_context()
         self.queue = cl.CommandQueue(self.ctx)
-        self.prg = cl.Program(self.ctx, '''//CL//
+        self.prg = cl.Program(self.ctx, f"typedef int tile_layer[{self.y}][{self.x}];"+'''//CL//
 
-        typedef int tile_layer[7][10];
+        
         
         float4 mul(__global const float4 mat[4], const float4 point)
         {
@@ -216,10 +220,10 @@ class main:
             c = point_in_triangle((int2)(tilerect.z, tilerect.y), p1, p2, p3);
             d = point_in_triangle((int2)(tilerect.z, tilerect.w), p1, p2, p3);
             if (a || b || c || d){bool_map[tri/3][tile.x][tile.y] = 1;}
-            a = lines_intersect(p1, p2, tilerect);
+            /*a = lines_intersect(p1, p2, tilerect);
             b = lines_intersect(p2, p3, tilerect);
             c = lines_intersect(p3, p1, tilerect);
-            if (a || b || c){bool_map[tri/3][tile.x][tile.y] = 1;}
+            if (a || b || c){bool_map[tri/3][tile.x][tile.y] = 1;}*/
             //printf("[%i|%i|%i|%i|%i|%i]", tile.x, tile.y, tilesize.x, tilesize.y, a, b);
         }
         
@@ -257,7 +261,7 @@ class main:
                 int2 pos = (int2)(get_global_id(0), get_global_id(1));
                 int2 tile = (int2)(pos.x/tilesizex, pos.y/tilesizey);
                 //printf("[%i|%i]", tile.x, tile.y);
-                write_imageui(screen, pos, (uint4)(tile.x*25,tile.y*25,255,255));//(uint4)(pos.x,pos.y,convert_int(tris[0].x),255));
+                write_imageui(screen, pos, (uint4)(255,255,255,255));//(tile.x*2.5,tile.y*2.5,255,255));//(uint4)(pos.x,pos.y,convert_int(tris[0].x),255));
                 float old_pixel_depth = 100000;
                 float test_pixel_depth;
                 for (int i = 0; i<(tri_count[tile.x][tile.y]*3); i += 3)
@@ -553,28 +557,24 @@ class main:
         
         self.vertex_shader(self.queue, (self.np_points.shape[0],), None, self.cl_points, self.cl_view, self.cl_screen, self.cl_out)
 
-        y = round(self.h / 100)
-        x = round(self.w / 100)
-        tilesizex = cl.cltypes.uint(self.w/x)
-        tilesizey = cl.cltypes.uint(self.h/y)
-        mapsize = int(self.np_points.shape[0]/3)
-        self.cl_tile_maps = cl.Buffer(self.ctx, mf.READ_WRITE, (4*y*x*mapsize))
-        self.cl_tile_layer = cl.Buffer(self.ctx, mf.READ_WRITE, (4*y*x))
-        self.cl_tile_layers = cl.Buffer(self.ctx, mf.READ_WRITE, (4*y*x*mapsize))
-        self.make_tiles1(self.queue, (mapsize, y, x), None, self.cl_out, self.cl_tile_maps, self.cl_tile_layers, tilesizey, tilesizex)
-        self.make_tiles2(self.queue, (y,x), None, self.cl_tile_maps, self.cl_tile_layers, self.cl_tile_layer, cl.cltypes.uint(self.np_points.shape[0]))
+        self.mapsize = int(self.np_points.shape[0]/3)
+        self.cl_tile_maps = cl.Buffer(self.ctx, mf.READ_WRITE, (4*self.y*self.x*self.mapsize))
+        self.cl_tile_layer = cl.Buffer(self.ctx, mf.READ_WRITE, (4*self.y*self.x))
+        self.cl_tile_layers = cl.Buffer(self.ctx, mf.READ_WRITE, (4*self.y*self.x*self.mapsize))
+        self.make_tiles1(self.queue, (self.mapsize, self.y, self.x), None, self.cl_out, self.cl_tile_maps, self.cl_tile_layers, self.tilesizey, self.tilesizex)
+        self.make_tiles2(self.queue, (self.y,self.x), None, self.cl_tile_maps, self.cl_tile_layers, self.cl_tile_layer, cl.cltypes.uint(self.np_points.shape[0]))
         
 #         np_out = np.empty((self.np_points.shape[0], x, y), dtype=np.int32)
 #         cl.enqueue_copy(self.queue, np_out, self.cl_tile_layers)
 #         print(np_out)
         
-        np_out = np.empty((y, x), dtype=np.int32)
+        np_out = np.empty((self.y, self.x), dtype=np.int32)
         cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
 #         print(np_out)
 
         self.fmt = cl.ImageFormat(cl.channel_order.RGBA, cl.channel_type.UNSIGNED_INT8)
         self.dest_buf = cl.Image(self.ctx, cl.mem_flags.WRITE_ONLY, self.fmt, shape=(self.h, self.w))
-        self.prg.draw_tris(self.queue, (self.h, self.w), None, self.cl_out, self.tex_coords, cl.cltypes.uint(self.np_points.shape[0]), self.cl_colours, self.cl_tile_layers, self.cl_tile_layer, self.tex, self.dest_buf, tilesizey, tilesizex).wait()
+        self.prg.draw_tris(self.queue, (self.h, self.w), None, self.cl_out, self.tex_coords, cl.cltypes.uint(self.np_points.shape[0]), self.cl_colours, self.cl_tile_layers, self.cl_tile_layer, self.tex, self.dest_buf, self.tilesizey, self.tilesizex).wait()
         self.dest = np.empty((self.w,self.h,4), dtype="uint8")
         cl.enqueue_copy(self.queue, self.dest, self.dest_buf, origin=(0, 0), region=(self.h, self.w))
 
@@ -582,6 +582,6 @@ class main:
         render_surface.blit(surf, (0, 0))
         verts = font.render(str(len(self.np_points)), 1, (0, 0, 0))
         render_surface.blit(verts, (0, 30))
-        for i in range(y):
-            for j in range(x):
-                render_surface.blit(font.render(str(np_out[i][j]), 1, (0, 0, 0)), (j*tilesizex, i*tilesizey))
+#         for i in range(self.y):
+#             for j in range(self.x):
+#                 render_surface.blit(font.render(str(np_out[i][j]), 1, (0, 0, 0)), (j*self.tilesizex, i*self.tilesizey))

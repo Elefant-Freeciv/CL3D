@@ -202,10 +202,11 @@ class main:
             int2 tile = (int2)(get_global_id(2), get_global_id(1));
             bool_map[tri/3][tile.x][tile.y] = 0;
             tile_layers[tri/3][tile.x][tile.y] = 0;
-            int4 tilerect = (int4)(tile.x*tilesize.x, tile.y*tilesize.y, tile.x*tilesize.x+tilesize.x, tile.y*tilesize.y+tilesize.y);
+            //int4 tilerect = (int4)(tile.x*tilesize.x, tile.y*tilesize.y, tile.x*tilesize.x+tilesize.x, tile.y*tilesize.y+tilesize.y);
+            int4 tilerect = (int4)(tile.y*tilesize.y, tile.x*tilesize.x, tile.y*tilesize.y+tilesize.y, tile.x*tilesize.x+tilesize.x);
             bool a = (p1.x >= tilerect.x && p1.x <= tilerect.z);
             bool b = (p1.y >= tilerect.y && p1.y <= tilerect.w);
-            printf("[%i|%i|%i|%i|%i|%i]", tilerect.x, tilerect.y, tilesize.x, tilesize.y, a, b);
+            //printf("[%i|%i|%i|%i|%i|%i]", tilerect.x, tilerect.y, tilesize.x, tilesize.y, a, b);
             bool c = (p2.x >= tilerect.x && p2.x <= tilerect.z);
             bool d = (p2.y >= tilerect.y && p2.y <= tilerect.w);
             bool e = (p3.x >= tilerect.x && p3.x <= tilerect.z);
@@ -224,7 +225,7 @@ class main:
         
         __kernel void make_tiles2(__global tile_layer *bool_map, __global tile_layer *out, __global tile_layer tri_count, uint pcount)
         {
-            int2 tile = (int2)(get_global_id(0), get_global_id(1));
+            int2 tile = (int2)(get_global_id(1), get_global_id(0));
             tri_count[tile.x][tile.y]=0;
             int j = 0;
             for (int i = 0; i<(pcount/3); i++)
@@ -582,5 +583,3 @@ class main:
         for i in range(x):
             for j in range(y):
                 render_surface.blit(font.render(str(np_out[i][j]), 1, (0, 0, 0)), (i*tilesizex, j*tilesizey))
-#         print(4*y*x*self.np_points.shape[0])
-#         cl.enqueue_fill_buffer(self.queue, self.cl_tile_layers, np.int32(-1), 0, self.cl_tile_layers.size)

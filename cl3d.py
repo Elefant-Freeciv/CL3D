@@ -63,7 +63,7 @@ class Math3D:
         return matA
 
 class main:
-    def __init__(self, h, w, target_tile_size):
+    def __init__(self, h, w, target_tile_size=25):
         self.h = h
         self.w = w
         self.y = round(self.h / target_tile_size)

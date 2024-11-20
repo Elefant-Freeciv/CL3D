@@ -95,8 +95,8 @@ font = pygame.font.SysFont("Arial", 15)
 m = main(h, w)
 clock = pygame.time.Clock()
 fast_enough = True
-# profiler = cProfile.Profile()
-# profiler.enable()
+profiler = cProfile.Profile()
+profiler.enable()
 false = True
 while false:
     if fast_enough:
@@ -115,7 +115,7 @@ while false:
 # #             sys.exit()
         fps = font.render(str(int(clock.get_fps())), 1, (0, 0, 0))
         render_surface.fill((255, 255, 255))
-        cProfile.run("m.render(render_surface, font)")
+        m.render(render_surface, font)
         main_screen.blit(render_surface, (0, 0))
         main_screen.blit(fps, (0, 0))
         pygame.display.flip()
@@ -130,9 +130,9 @@ while false:
         fast_enough = False
         print("Cube count: ", (len(m.np_points)-9)/36)
   
-# profiler.disable()
-# stats = pstats.Stats(profiler).sort_stats("tottime")
-# stats.print_stats()
+profiler.disable()
+stats = pstats.Stats(profiler).sort_stats("tottime")
+stats.print_stats()
 sys.exit()
             
             

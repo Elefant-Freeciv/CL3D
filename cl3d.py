@@ -498,17 +498,17 @@ class main:
                     (1,-1,1),#6
                     (1,1,1)]#7
         triangles = [(0,1,2),
-                (0,1,3),
-                (4,5,6),
-                (4,5,7),
-                (0,1,4),
-                (0,1,6),
-                (2,3,5),
-                (3,5,6),
-                (1,3,7),
-                (1,3,7),
-                (0,2,4),
-                (0,2,5)]
+                    (2,1,3),
+                    (4,5,6),
+                    (5,6,7),
+                    (0,1,4),
+                    (1,4,6),
+                    (2,3,5),
+                    (3,5,7),
+                    (1,3,7),
+                    (1,6,7),
+                    (0,2,4),
+                    (4,2,5)]
         
         tex_coords = [(255,0),
                       (0,255),
@@ -522,8 +522,11 @@ class main:
         mf = cl.mem_flags
         
         tris = []
-        for tri in triangles:
+        tcount = self.np_points.shape[0]
+        for tri in self.np_tris:
             tris.append((tri[0], tri[1], tri[2], 1))
+        for tri in triangles:
+            tris.append((tri[0]+tcount, tri[1]+tcount, tri[2]+tcount, 1))
         self.np_tris = np.array(tris, dtype=cl.cltypes.uint)
         print(self.np_tris)
         self.cl_tris = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_tris)
@@ -533,9 +536,9 @@ class main:
         np_texc = np.array(self.texc, dtype=np.float32)
         self.tex_coords = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_texc)
         
-        for vert in self.np_points:
-            vertices.append([vert[0], vert[1], vert[2]])
         points = []
+        for vert in self.np_points:
+            points.append((vert[0], vert[1], vert[2], 1.0))
         for v in vertices:
             points.append((v[0], v[1], v[2], 1.0))
         self.np_points = np.array(points, dtype=np.float32)

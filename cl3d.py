@@ -166,14 +166,14 @@ class main:
             return 1/z;
         }
         
-        uint4 texture_pixel(int2 pos, int3 idxs, float z, __global tex_img tex, __global float4 *tex_coords, float4 p1, float4 p2, float4 p3)
+        uint4 texture_pixel(int2 pos, int i, float z, __global tex_img tex, __global float8 *tex_coords, float4 p1, float4 p2, float4 p3)
         {   
             float2 px = (float2)(convert_float(pos.x),convert_float(pos.y));
             float3 bary = barycentric(px, p1, p2, p3);
-            
-            float2 st0 = (float2)(tex_coords[idxs.x].x, tex_coords[idxs.x].y);
-            float2 st1 = (float2)(tex_coords[idxs.y].x, tex_coords[idxs.y].y);
-            float2 st2 = (float2)(tex_coords[idxs.z].x, tex_coords[idxs.z].y);
+            //printf("%i", i);
+            float2 st0 = tex_coords[i].s01;
+            float2 st1 = tex_coords[i].s23;
+            float2 st2 = tex_coords[i].s45;
             
             st0[0] /= p1.w, st0[1] /= p1.w;
             st1[0] /= p2.w, st1[1] /= p2.w;
@@ -260,7 +260,7 @@ class main:
         __kernel void draw_tris(
             __global const uint4 *tris,
             __global const float4 *points,
-            __global const float4 *tex_coords,
+            __global const float8 *tex_coords,
             uint pcount,
             __global const uint4 *colours,
             __global tile_layer *tile_maps,
@@ -283,7 +283,7 @@ class main:
                         test_pixel_depth = pixel_depth(pos, p1, p2, p3);
                         if(test_pixel_depth < old_pixel_depth)
                         {
-                            uint4 colour = texture_pixel(pos, (int3)(tris[tile_maps[i][tile.x][tile.y]].x, tris[tile_maps[i][tile.x][tile.y]].y, tris[tile_maps[i][tile.x][tile.y]].z), test_pixel_depth, tex, tex_coords, p1, p2, p3);
+                            uint4 colour = texture_pixel(pos, tile_maps[i][tile.x][tile.y], test_pixel_depth, tex, tex_coords, p1, p2, p3);
                             // custom fragment shader here
                             //colour /= (convert_uint(test_pixel_depth*10));
                             screen[pos.x][pos.y] = colour;
@@ -307,15 +307,9 @@ class main:
         triangles = [(0,1,2,0),#x axis
                 (3,4,5,0),#y axis
                 (6,7,8,0)]#z axis
-        tex_coords = [(0, 0),
-                    (255, 0),
-                    (0, 255),
-                    (0, 0),
-                    (0, 255),
-                    (255, 0),
-                    (255, 0),
-                    (0, 0),
-                    (0, 255)]
+        tex_coords = [(0, 0, 255, 0, 0, 255,1,0),
+                    (0, 0, 255, 0, 0, 255,1,0),
+                    (0, 0, 255, 0, 0, 255,1,0)]
         colours = [(255,0,0,255),
                    (0,255,0,255),
                    (0,0,255,255)]
@@ -335,10 +329,10 @@ class main:
         #print(self.np_points)
         self.texc = []
         for coord in tex_coords:
-            self.texc.append([coord[0], coord[1],0,0])
-        np_texc = np.array(self.texc, dtype=np.float32)
-        #print(np_texc)
-        self.tex_coords = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_texc)
+            self.texc.append(coord)
+        self.np_tex_coords = np.array(self.texc, dtype=np.float32)
+        print(self.np_tex_coords)
+        self.tex_coords = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_tex_coords)
         
         view = [[0.08333333333333333, 0.0, 0.0, 0.0], [0.0, 0.125, 0.0, 0.0], [0.0, 0.0, -0.02002002002002002, -0.8018018018018018], [0, 0, 0, 1.0]]
         np_view = np.array(view, dtype=np.float32)
@@ -498,27 +492,31 @@ class main:
                     (1,-1,1),#6
                     (1,1,1)]#7
         triangles = [(0,1,2),
-                    (2,1,3),
-                    (4,5,6),
-                    (5,6,7),
-                    (0,1,4),
-                    (1,4,6),
-                    (2,3,5),
-                    (3,5,7),
-                    (1,3,7),
-                    (1,6,7),
-                    (0,2,4),
-                    (4,2,5)]
+                    (2,1,3)]
+#                     (4,5,6),
+#                     (5,6,7),
+#                     (0,1,4),
+#                     (1,4,6),
+#                     (2,3,5),
+#                     (3,5,7),
+#                     (1,3,7),
+#                     (1,6,7),
+#                     (0,2,4),
+#                     (4,2,5)]
         
-        tex_coords = [(255,0),
-                      (0,255),
-                      (0,0),
-                      (255,255),
-                      (255,0),
-                      (0,255),
-                      (255,0),
-                      (255,255)
-                      ]
+        tex_coords = [(0, 0, 255, 0, 0, 255,1,0),
+                      (0, 255, 255, 0, 255,255,1,0)]
+#                       (0, 0, 255, 0, 0, 255,1,0),
+#                       (0, 0, 255, 0, 0, 255,1,0),
+#                       (0, 0, 255, 0, 0, 255,1,0),
+#                       (0, 0, 255, 0, 0, 255,1,0),
+#                       (0, 0, 255, 0, 0, 255,1,0),
+#                       (0, 0, 255, 0, 0, 255,1,0),
+#                       (0, 0, 255, 0, 0, 255,1,0),
+#                       (0, 0, 255, 0, 0, 255,1,0),
+#                       (0, 0, 255, 0, 0, 255,1,0),
+#                       (0, 0, 255, 0, 0, 255,1,0)
+#                       ]
         mf = cl.mem_flags
         
         tris = []
@@ -531,10 +529,12 @@ class main:
         print(self.np_tris)
         self.cl_tris = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_tris)
         
+        for coord in self.np_tex_coords:
+            self.texc.append(coord)
         for coord in tex_coords:
-            self.texc.append([coord[0], coord[1],0,0])
-        np_texc = np.array(self.texc, dtype=np.float32)
-        self.tex_coords = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_texc)
+            self.texc.append(coord)
+        self.np_tex_coords = np.array(self.texc, dtype=np.float32)
+        self.tex_coords = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_tex_coords)
         
         points = []
         for vert in self.np_points:

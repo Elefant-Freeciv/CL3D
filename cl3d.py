@@ -183,7 +183,7 @@ class main:
             float y = bary.x * st0[1] + bary.y * st1[1] + bary.z * st2[1];
             x *= z, y *= z;
             
-            return tex[convert_int(x)][convert_int(y)];
+            return tex[min(convert_int(x), 255)][min(convert_int(y), 255)];
         }
         
         __kernel void vertex(__global const float4 *points,
@@ -504,8 +504,8 @@ class main:
 #                     (0,2,4),
 #                     (4,2,5)]
         
-        tex_coords = [(0, 0, 255, 0, 0, 255,1,0),
-                      (0, 255, 255, 0, 255,255,1,0)]
+        tex_coords = [(0, 255, 255, 255, 0, 0,1,0),
+                      (0, 0, 255, 255, 255,0,1,0)]
 #                       (0, 0, 255, 0, 0, 255,1,0),
 #                       (0, 0, 255, 0, 0, 255,1,0),
 #                       (0, 0, 255, 0, 0, 255,1,0),
@@ -525,14 +525,16 @@ class main:
             tris.append((tri[0], tri[1], tri[2], 1))
         for tri in triangles:
             tris.append((tri[0]+tcount, tri[1]+tcount, tri[2]+tcount, 1))
+        print(tris)
         self.np_tris = np.array(tris, dtype=cl.cltypes.uint)
-        print(self.np_tris)
+        #print(self.np_tris)
         self.cl_tris = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_tris)
         
-        for coord in self.np_tex_coords:
-            self.texc.append(coord)
+#         for coord in self.np_tex_coords:
+#             self.texc.append((coord[0],coord[1],coord[2],coord[3],coord[4],coord[5],coord[6],coord[7]))
         for coord in tex_coords:
             self.texc.append(coord)
+        print("{",self.texc,"}")
         self.np_tex_coords = np.array(self.texc, dtype=np.float32)
         self.tex_coords = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_tex_coords)
         

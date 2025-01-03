@@ -3,7 +3,7 @@ from cl3d import main
 
 h = 350*2
 w = 525*2
-target_tile_size = 25
+target_tile_size = 100
 
 pygame.init()
 main_screen = pygame.display.set_mode((w, h))

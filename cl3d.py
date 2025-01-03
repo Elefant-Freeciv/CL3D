@@ -166,18 +166,14 @@ class main:
             return 1/z;
         }
         
-        uint4 texture_pixel(int2 pos, int i, float z, __global tex_img tex, __global float4 *tex_coords, __global float4 *tris)
-        {
-            float4 p1 = tris[i];
-            float4 p2 = tris[i+1];
-            float4 p3 = tris[i+2];
-            
+        uint4 texture_pixel(int2 pos, int i, float z, __global tex_img tex, __global float8 *tex_coords, float4 p1, float4 p2, float4 p3)
+        {   
             float2 px = (float2)(convert_float(pos.x),convert_float(pos.y));
             float3 bary = barycentric(px, p1, p2, p3);
-            
-            float2 st0 = (float2)(tex_coords[i].x, tex_coords[i].y);
-            float2 st1 = (float2)(tex_coords[i+1].x, tex_coords[i+1].y);
-            float2 st2 = (float2)(tex_coords[i+2].x, tex_coords[i+2].y);
+            //printf("%i", i);
+            float2 st0 = tex_coords[i].s01;
+            float2 st1 = tex_coords[i].s23;
+            float2 st2 = tex_coords[i].s45;
             
             st0[0] /= p1.w, st0[1] /= p1.w;
             st1[0] /= p2.w, st1[1] /= p2.w;
@@ -187,7 +183,14 @@ class main:
             float y = bary.x * st0[1] + bary.y * st1[1] + bary.z * st2[1];
             x *= z, y *= z;
             
-            return tex[convert_int(x)][convert_int(y)];
+            if(z>0 && z<1)
+            {
+                return tex[convert_int(x)][convert_int(y)];
+            }
+            else
+            {
+                return (uint4)(255, 0, 180, 255);
+            }
         }
         
         __kernel void vertex(__global const float4 *points,
@@ -207,18 +210,20 @@ class main:
         }
         
         __kernel void make_tiles1(
-                                    __global const float4 *tris,
+                                    __global const uint4 *tris,
+                                    __global const float4 *points,
                                     __global tile_layer *bool_map,
                                     __global tile_layer *tile_layers
                                  )
         {
-            int tri = get_global_id(0)*3;
-            float4 p1 = tris[tri];
-            float4 p2 = tris[tri+1];
-            float4 p3 = tris[tri+2];
+            int gid = get_global_id(0);
+            uint4 tri = tris[gid];
+            float4 p1 = points[tri.x];
+            float4 p2 = points[tri.y];
+            float4 p3 = points[tri.z];
             int2 tile = (int2)(get_global_id(1), get_global_id(2));
-            bool_map[tri/3][tile.x][tile.y] = 0;
-            tile_layers[tri/3][tile.x][tile.y] = 0;
+            bool_map[gid][tile.x][tile.y] = 0;
+            tile_layers[gid][tile.x][tile.y] = 0;
             bool a, b, c, d, e, f; 
             int4 tilerect = (int4)(tile.x*tilesize.x, tile.y*tilesize.y, tile.x*tilesize.x+tilesize.x, tile.y*tilesize.y+tilesize.y);
             a = (p1.x >= tilerect.x && p1.x <= tilerect.z);
@@ -227,27 +232,27 @@ class main:
             d = (p2.y >= tilerect.y && p2.y <= tilerect.w);
             e = (p3.x >= tilerect.x && p3.x <= tilerect.z);
             f = (p3.y >= tilerect.y && p3.y <= tilerect.w);
-            if ((a && b) || (c && d) || (e && f)){bool_map[tri/3][tile.x][tile.y] = 1;}
+            if ((a && b) || (c && d) || (e && f)){bool_map[gid][tile.x][tile.y] = 1;}
             a = point_in_triangle((int2)(tilerect.x, tilerect.y), p1, p2, p3);
             b = point_in_triangle((int2)(tilerect.x, tilerect.w), p1, p2, p3);
             c = point_in_triangle((int2)(tilerect.z, tilerect.y), p1, p2, p3);
             d = point_in_triangle((int2)(tilerect.z, tilerect.w), p1, p2, p3);
-            if (a || b || c || d){bool_map[tri/3][tile.x][tile.y] = 1;}
+            if (a || b || c || d){bool_map[gid][tile.x][tile.y] = 1;}
             a = lines_intersect(p1, p2, tilerect);
             b = lines_intersect(p2, p3, tilerect);
             c = lines_intersect(p3, p1, tilerect);
             d = lines_intersect(p1, p2, (int4)(tilerect.x,tilerect.w,tilerect.z,tilerect.y));
             e = lines_intersect(p2, p3, (int4)(tilerect.x,tilerect.w,tilerect.z,tilerect.y));
             f = lines_intersect(p3, p1, (int4)(tilerect.x,tilerect.w,tilerect.z,tilerect.y));
-            if (a || b || c || d || e || f){bool_map[tri/3][tile.x][tile.y] = 1;}
+            if (a || b || c || d || e || f){bool_map[gid][tile.x][tile.y] = 1;}
         }
         
-        __kernel void make_tiles2(__global tile_layer *bool_map, __global tile_layer *out, __global tile_layer tri_count, uint pcount)
+        __kernel void make_tiles2(__global tile_layer *bool_map, __global tile_layer *out, __global tile_layer tri_count, uint tcount)
         {
             int2 tile = (int2)(get_global_id(0), get_global_id(1));
             tri_count[tile.x][tile.y]=0;
             int j = 0;
-            for (int i = 0; i<(pcount/3); i++)
+            for (int i = 0; i<(tcount); i++)
             {
                 if (bool_map[i][tile.x][tile.y]==1)
                 {
@@ -260,8 +265,9 @@ class main:
         }
         
         __kernel void draw_tris(
-            __global const float4 *tris,
-            __global const float4 *tex_coords,
+            __global const uint4 *tris,
+            __global const float4 *points,
+            __global const float8 *tex_coords,
             uint pcount,
             __global const uint4 *colours,
             __global tile_layer *tile_maps,
@@ -274,15 +280,17 @@ class main:
                 screen[pos.x][pos.y] = (uint4)(255,255,255,255);//(tile.x*2.5,tile.y*2.5,255,255));//(uint4)(pos.x,pos.y,convert_int(tris[0].x),255));
                 float old_pixel_depth = 100000;
                 float test_pixel_depth;
-                for (int i = 0; i<(tri_count[tile.x][tile.y]*3); i += 3)
+                for (int i = 0; i<(tri_count[tile.x][tile.y]); i++)
                 {
-                    
-                    if(point_in_triangle(pos, tris[tile_maps[i/3][tile.x][tile.y]*3], tris[tile_maps[i/3][tile.x][tile.y]*3+1], tris[tile_maps[i/3][tile.x][tile.y]*3+2]))
+                    float4 p1 = points[tris[tile_maps[i][tile.x][tile.y]].x];
+                    float4 p2 = points[tris[tile_maps[i][tile.x][tile.y]].y];
+                    float4 p3 = points[tris[tile_maps[i][tile.x][tile.y]].z];
+                    if(point_in_triangle(pos, p1, p2, p3))
                     {
-                        test_pixel_depth = pixel_depth(pos, tris[tile_maps[i/3][tile.x][tile.y]*3], tris[tile_maps[i/3][tile.x][tile.y]*3+1], tris[tile_maps[i/3][tile.x][tile.y]*3+2]);
+                        test_pixel_depth = pixel_depth(pos, p1, p2, p3);
                         if(test_pixel_depth < old_pixel_depth)
                         {
-                            uint4 colour = texture_pixel(pos, tile_maps[i/3][tile.x][tile.y]*3, test_pixel_depth, tex, tex_coords, tris);
+                            uint4 colour = texture_pixel(pos, tile_maps[i][tile.x][tile.y], test_pixel_depth, tex, tex_coords, p1, p2, p3);
                             // custom fragment shader here
                             //colour /= (convert_uint(test_pixel_depth*10));
                             screen[pos.x][pos.y] = colour;
@@ -303,31 +311,35 @@ class main:
                     (.1, 0.0, 10.0),  #z axis
                     (0.0, 0.0, 10.0),  #z axis
                     (0.0, 0.0, -10.0)]
-        tex_coords = [(0, 0),
-                    (255, 0),
-                    (0, 255),
-                    (0, 0),
-                    (0, 255),
-                    (255, 0),
-                    (255, 0),
-                    (0, 0),
-                    (0, 255)]
+        triangles = [(0,1,2,0),#x axis
+                (3,4,5,0),#y axis
+                (6,7,8,0)]#z axis
+        tex_coords = [(0, 0, 255, 0, 0, 255,1,0),
+                    (0, 0, 255, 0, 0, 255,1,0),
+                    (0, 0, 255, 0, 0, 255,1,0)]
         colours = [(255,0,0,255),
                    (0,255,0,255),
                    (0,0,255,255)]
         self.np_colours = np.array(colours, dtype="uint")
+        print(self.np_colours)
         self.cl_colours = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_colours)
         points = []
         for v in vertices:
             points.append((v[0], v[1], v[2], 1.0))
         self.np_points = np.array(points, dtype=np.float32)
-        print(self.np_points)
+        tris = []
+        for tri in triangles:
+            tris.append((tri[0], tri[1], tri[2], 1))
+        self.np_tris = np.array(tris, dtype=cl.cltypes.uint)
+        print(self.np_tris)
+        self.cl_tris = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_tris)
+        #print(self.np_points)
         self.texc = []
         for coord in tex_coords:
-            self.texc.append([coord[0], coord[1],0,0])
-        np_texc = np.array(self.texc, dtype=np.float32)
-        print(np_texc)
-        self.tex_coords = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_texc)
+            self.texc.append(coord)
+        self.np_tex_coords = np.array(self.texc, dtype=np.float32)
+        print(self.np_tex_coords)
+        self.tex_coords = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_tex_coords)
         
         view = [[0.08333333333333333, 0.0, 0.0, 0.0], [0.0, 0.125, 0.0, 0.0], [0.0, 0.0, -0.02002002002002002, -0.8018018018018018], [0, 0, 0, 1.0]]
         np_view = np.array(view, dtype=np.float32)
@@ -395,99 +407,62 @@ class main:
             self.rotation[0] -= 0.01
             
     def make(self):
-        vertices=[[-1.0, -1.0, -1.0],
-                 [1.0, -1.0, -1.0],
-                 [1.0, 1.0, -1.0],
-                 [1.0, 1.0, -1.0],
-                 [-1.0, 1.0, -1.0],
-                 [-1.0, -1.0, -1.0],
-
-                 [-1.0, -1.0, 1.0],
-                 [1.0, -1.0, 1.0],
-                 [1.0, 1.0, 1.0],
-                 [1.0, 1.0, 1.0],
-                 [-1.0, 1.0, 1.0],
-                 [-1.0, -1.0, 1.0],
-
-                 [-1.0, 1.0, 1.0],
-                 [-1.0, 1.0, -1.0],
-                 [-1.0, -1.0, -1.0],
-                 [-1.0, -1.0, -1.0],
-                 [-1.0, -1.0, 1.0],
-                 [-1.0, 1.0, 1.0],
-
-                 [1.0, 1.0, 1.0],
-                 [1.0, 1.0, -1.0],
-                 [1.0, -1.0, -1.0],
-                 [1.0, -1.0, -1.0],
-                 [1.0, -1.0, 1.0],
-                 [1.0, 1.0, 1.0],
-
-                 [-1.0, -1.0, -1.0],
-                 [1.0, -1.0, -1.0],
-                 [1.0, -1.0, 1.0],
-                 [1.0, -1.0, 1.0],
-                 [-1.0, -1.0, 1.0],
-                 [-1.0, -1.0, -1.0],
-
-                 [-1.0, 1.0, -1.0],
-                 [1.0, 1.0, -1.0],
-                 [1.0, 1.0, 1.0],
-                 [1.0, 1.0, 1.0],
-                 [-1.0, 1.0, 1.0],
-                 [-1.0, 1.0, -1.0]]
-        tex_coords = [(255, 0),
-                    (0, 0),
-                    (0, 255),
-                    (0, 255),
-                    (0, 0),
-                    (255, 0),
-                      
-                    (255, 0),
-                    (0, 0),
-                    (0, 255),
-                    (0, 255),
-                    (255, 255),
-                    (255, 0),
-                      
-                    (255, 0),
-                    (0, 0),
-                    (0, 255),
-                    (0, 255),
-                    (255, 255),
-                    (255, 0),
-                      
-                    (255, 0),
-                    (0, 0),
-                    (0, 255),
-                    (0, 255),
-                    (255, 255),
-                    (255, 0),
-                      
-                    (255, 0),
-                    (0, 0),
-                    (0, 255),
-                    (0, 255),
-                    (255, 255),
-                    (255, 0),
-                      
-                    (0, 0),
-                    (255, 0),
-                    (255, 255),
-                    (255, 255),
-                    (0, 255),
-                    (0, 0)]
-
+        vertices = [(-1,-1,-1),#0
+                    (1,-1,-1),#1
+                    (-1,1,-1),#2
+                    (1,1,-1),#3
+                    (-1,-1,1),#4
+                    (-1,1,1),#5
+                    (1,-1,1),#6
+                    (1,1,1)]#7
+        triangles = [(0,1,2),
+                    (2,1,3),
+                    (4,5,6),
+                    (5,6,7),
+                    (0,1,4),
+                    (1,4,6),
+                    (2,3,5),
+                    (3,5,7),
+                    (1,3,7),
+                    (1,6,7),
+                    (0,2,4),
+                    (4,2,5)]
+        
+        tex_coords = [(0, 255, 255, 255, 0, 0,1,0),
+                      (0, 0, 255, 255, 255,0,1,0),
+                      (0, 255, 255, 255, 0, 0,1,0),
+                      (0, 0, 255, 255, 255,0,1,0),
+                      (0, 255, 255, 255, 0, 0,1,0),
+                      (0, 0, 255, 255, 255,0,1,0),
+                      (0, 255, 255, 255, 0, 0,1,0),
+                      (0, 0, 255, 255, 255,0,1,0),
+                      (0, 255, 0, 0, 255, 0,1,0),
+                      (0, 255, 255, 255, 255,0,1,0),
+                      (0, 255, 255, 255, 0, 0,1,0),
+                      (0, 0, 255, 255, 255,0,1,0)
+                      ]
         mf = cl.mem_flags
         
-        for coord in tex_coords:
-            self.texc.append([coord[0], coord[1],0,0])
-        np_texc = np.array(self.texc, dtype=np.float32)
-        self.tex_coords = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_texc)
+        tris = []
+        tcount = self.np_points.shape[0]
+        for tri in self.np_tris:
+            tris.append((tri[0], tri[1], tri[2], 1))
+        for tri in triangles:
+            tris.append((tri[0]+tcount, tri[1]+tcount, tri[2]+tcount, 1))
+        print(tris)
+        self.np_tris = np.array(tris, dtype=cl.cltypes.uint)
+
+        self.cl_tris = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_tris)
         
-        for vert in self.np_points:
-            vertices.append([vert[0], vert[1], vert[2]])
+        for coord in tex_coords:
+            self.texc.append(coord)
+        print("{",self.texc,"}")
+        self.np_tex_coords = np.array(self.texc, dtype=np.float32)
+        self.tex_coords = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_tex_coords)
+        
         points = []
+        for vert in self.np_points:
+            points.append((vert[0], vert[1], vert[2], 1.0))
         for v in vertices:
             points.append((v[0], v[1], v[2], 1.0))
         self.np_points = np.array(points, dtype=np.float32)
@@ -564,19 +539,19 @@ class main:
         
         self.vertex_shader(self.queue, (self.np_points.shape[0],), None, self.cl_points, self.cl_view, self.cl_screen, self.cl_out)
 
-        self.mapsize = int(self.np_points.shape[0]/3)
+        self.mapsize = int(self.np_tris.shape[0])
         self.cl_tile_maps = cl.Buffer(self.ctx, mf.READ_WRITE, (4*self.y*self.x*self.mapsize))
         self.cl_tile_layer = cl.Buffer(self.ctx, mf.READ_WRITE, (4*self.y*self.x))
         self.cl_tile_layers = cl.Buffer(self.ctx, mf.READ_WRITE, (4*self.y*self.x*self.mapsize))
-        self.make_tiles1(self.queue, (self.mapsize, self.y, self.x), None, self.cl_out, self.cl_tile_maps, self.cl_tile_layers)
-        self.make_tiles2(self.queue, (self.y,self.x), None, self.cl_tile_maps, self.cl_tile_layers, self.cl_tile_layer, cl.cltypes.uint(self.np_points.shape[0]))
+        self.make_tiles1(self.queue, (self.mapsize, self.y, self.x), None, self.cl_tris, self.cl_out, self.cl_tile_maps, self.cl_tile_layers)
+        self.make_tiles2(self.queue, (self.y,self.x), None, self.cl_tile_maps, self.cl_tile_layers, self.cl_tile_layer, cl.cltypes.uint(self.np_tris.shape[0]))
         
-#         np_out = np.empty((self.y, self.x), dtype=np.int32)
-#         cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
+        np_out = np.empty((self.y, self.x), dtype=np.int32)
+        cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
 
         self.dest = np.empty((self.h,self.w,4), dtype=cl.cltypes.uint)
         self.dest_buf = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.dest)
-        self.prg.draw_tris(self.queue, (self.h, self.w), None, self.cl_out, self.tex_coords, cl.cltypes.uint(self.np_points.shape[0]), self.cl_colours, self.cl_tile_layers, self.cl_tile_layer, self.tex, self.dest_buf).wait()
+        self.prg.draw_tris(self.queue, (self.h, self.w), None, self.cl_tris, self.cl_out, self.tex_coords, cl.cltypes.uint(self.np_points.shape[0]), self.cl_colours, self.cl_tile_layers, self.cl_tile_layer, self.tex, self.dest_buf).wait()
         cl.enqueue_copy(self.queue, self.dest, self.dest_buf)
 
         surf = pygame.surfarray.make_surface(self.dest[:,:,:3])

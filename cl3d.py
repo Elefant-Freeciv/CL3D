@@ -185,7 +185,7 @@ class main:
             
             if(z>0 && z<1)
             {
-                return tex[convert_int(x)][convert_int(y)];
+                return tex[min(convert_int(x), 255)][min(convert_int(y), 255)];
             }
             else
             {

@@ -88,7 +88,7 @@ class main:
 
         typedef int tile_layer[{self.y}][{self.x}];
         typedef uint4 scr_img[{self.h}][{self.w}];
-        typedef uint4 tex_img[256][256];
+        typedef uint4 tex_img[256][256][256];
         '''+'''//CL//
 
         
@@ -183,13 +183,13 @@ class main:
             float y = bary.x * st0[1] + bary.y * st1[1] + bary.z * st2[1];
             x *= z, y *= z;
             
-            if(z>0 && z<1)
+            if(x>=0 && x<=255 && y>=0 && y<=255)
             {
-                return tex[min(convert_int(x), 255)][min(convert_int(y), 255)];
+                return tex[convert_int(tex_coords[i][6])][min(convert_int(x), 255)][min(convert_int(y), 255)];
             }
             else
             {
-                return (uint4)(255, 0, 180, 255);
+                return (uint4)(255, 0, 180, 0);
             }
         }
         
@@ -293,7 +293,10 @@ class main:
                             uint4 colour = texture_pixel(pos, tile_maps[i][tile.x][tile.y], test_pixel_depth, tex, tex_coords, p1, p2, p3);
                             // custom fragment shader here
                             //colour /= (convert_uint(test_pixel_depth*10));
-                            screen[pos.x][pos.y] = colour;
+                            if (colour[3] != 0)
+                            {
+                                screen[pos.x][pos.y] = colour;
+                            }
                             old_pixel_depth = test_pixel_depth;
                         }
                     }
@@ -351,9 +354,12 @@ class main:
                  [0.0, 0.0, 0.0, 1.0]]
         np_model = np.array(model, dtype=np.float32)
 #         print(np_model)
-        self.src_img = Image.open('Tex2.png').convert('RGBA')
-        self.src = np.array(self.src_img, dtype=cl.cltypes.uint)
-        print(self.src.shape)
+        self.src_img1 = Image.open('Tex.png').convert('RGBA')
+        self.src_img2 = Image.open('Tex2.png').convert('RGBA')
+        self.src = np.zeros((2,256,256,4), dtype=cl.cltypes.uint)
+        #for i in range(0,255):
+        self.src[0] = np.array(self.src_img1, dtype=cl.cltypes.uint)
+        self.src[1] = np.array(self.src_img2, dtype=cl.cltypes.uint)
         self.tex = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.src)
         
         np_screen = np.array([[self.w, self.h]], dtype=np.float32)
@@ -430,16 +436,16 @@ class main:
         
         tex_coords = [(0, 255, 255, 255, 0, 0,1,0),
                       (0, 0, 255, 255, 255,0,1,0),
+                      (0, 255, 255, 255, 0, 0,0,0),
+                      (0, 0, 255, 255, 255,0,0,0),
                       (0, 255, 255, 255, 0, 0,1,0),
                       (0, 0, 255, 255, 255,0,1,0),
-                      (0, 255, 255, 255, 0, 0,1,0),
-                      (0, 0, 255, 255, 255,0,1,0),
-                      (0, 255, 255, 255, 0, 0,1,0),
-                      (0, 0, 255, 255, 255,0,1,0),
+                      (0, 255, 255, 255, 0, 0,0,0),
+                      (0, 0, 255, 255, 255,0,0,0),
                       (0, 255, 0, 0, 255, 0,1,0),
                       (0, 255, 255, 255, 255,0,1,0),
-                      (0, 255, 255, 255, 0, 0,1,0),
-                      (0, 0, 255, 255, 255,0,1,0)
+                      (0, 255, 255, 255, 0, 0,0,0),
+                      (0, 0, 255, 255, 255,0,0,0)
                       ]
         mf = cl.mem_flags
         

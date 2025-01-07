@@ -3,7 +3,7 @@ from cl3d import main
 
 h = 350*2
 w = 525*2
-target_tile_size = 100
+target_tile_size = 16
 
 pygame.init()
 main_screen = pygame.display.set_mode((w, h))
@@ -15,7 +15,8 @@ r = True
 while r == True:
     dt = clock.tick(60)/1000.0
     m.update(dt)
-    fps = font.render(str(int(clock.get_fps())), 1, (0, 0, 0))
+    fps_val = int(clock.get_fps())
+    fps = font.render(str(fps_val), 1, (0, 0, 0))
     render_surface.fill((255, 255, 255))
     m.render(render_surface, font)
     main_screen.blit(render_surface, (0, 0))
@@ -27,6 +28,6 @@ while r == True:
         if event.type == pygame.QUIT:
             pygame.quit()
             r = False
-    m.handle_input(events, pressed_keys)
+    m.handle_input(events, pressed_keys, fps_val)
 pygame.quit()
             

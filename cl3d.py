@@ -63,17 +63,16 @@ class Math3D:
         return matA
 
 class main:
-    def __init__(self, h, w, target_tile_size=25):
-        self.h = h
-        self.w = w
-        self.y = round(self.h / target_tile_size)
-        self.x = round(self.w / target_tile_size)
-        self.tilesizex = cl.cltypes.uint(self.w/self.x)
-        self.tilesizey = cl.cltypes.uint(self.h/self.y)
-        if (self.tilesizex*self.x)<self.w:
-            self.tilesizex += 1
-        if (self.tilesizey*self.y)<self.h:
-            self.tilesizey += 1
+    def __init__(self, h, w, target_tile_size=16):
+        self.h = math.ceil(h/target_tile_size)*target_tile_size
+        self.w = math.ceil(w/target_tile_size)*target_tile_size
+        self.y = int(self.h / target_tile_size)
+        self.x = int(self.w / target_tile_size)
+        self.tilesizex = target_tile_size
+        self.tilesizey = target_tile_size
+#         print((self.tilesizex,self.tilesizey))
+#         print((self.h, self.w))
+#         print((self.h/self.tilesizey, self.w/self.tilesizex))
         self.viewpos = [0.0, 0.0, -10.0]
         self.rotation = [0.0, 0.0, 0.0]
         self.delta = 0.0
@@ -93,7 +92,7 @@ class main:
 
         
         
-        float4 mul(__global const float4 mat[4], const float4 point)
+        float4 mul(__constant float4 mat[4], const float4 point)
         {
             float4 rtn;
             rtn.x = dot(mat[0], point);
@@ -166,7 +165,7 @@ class main:
             return 1/z;
         }
         
-        uint4 texture_pixel(int2 pos, int i, float z, __global tex_img tex, __global float8 *tex_coords, float4 p1, float4 p2, float4 p3)
+        uint4 texture_pixel(int2 pos, int i, float z, __global tex_img tex, __constant float8 *tex_coords, float4 p1, float4 p2, float4 p3)
         {   
             float2 px = (float2)(convert_float(pos.x),convert_float(pos.y));
             float3 bary = barycentric(px, p1, p2, p3);
@@ -193,9 +192,9 @@ class main:
             }
         }
         
-        __kernel void vertex(__global const float4 *points,
-                             __global const float4 mat[4],
-                             __global const float2 *screen,
+        __kernel void vertex(__constant float4 *points,
+                             __constant float4 mat[4],
+                             __constant float2 *screen,
                              __global float4 *out)
         {
             float4 workvec;
@@ -265,22 +264,23 @@ class main:
         }
         
         __kernel void draw_tris(
-            __global const uint4 *tris,
-            __global const float4 *points,
-            __global const float8 *tex_coords,
+            __constant uint4 *tris,
+            __constant float4 *points,
+            __constant float8 *tex_coords,
             uint pcount,
             __global const uint4 *colours,
-            __global tile_layer *tile_maps,
-            __global tile_layer tri_count,
+            __constant tile_layer *tile_maps,
+            __constant tile_layer tri_counts,
             __global tex_img tex,
             __global scr_img screen)
             {
                 int2 pos = (int2)(get_global_id(0), get_global_id(1));
                 int2 tile = (int2)(pos.x/tilesize.x, pos.y/tilesize.y);
+                
                 screen[pos.x][pos.y] = (uint4)(255,255,255,255);//(tile.x*2.5,tile.y*2.5,255,255));//(uint4)(pos.x,pos.y,convert_int(tris[0].x),255));
                 float old_pixel_depth = 100000;
                 float test_pixel_depth;
-                for (int i = 0; i<(tri_count[tile.x][tile.y]); i++)
+                for (int i = 0; i<tri_counts[tile.x][tile.y]; i++)
                 {
                     float4 p1 = points[tris[tile_maps[i][tile.x][tile.y]].x];
                     float4 p2 = points[tris[tile_maps[i][tile.x][tile.y]].y];
@@ -380,7 +380,8 @@ class main:
             self.rotation[0] = -rel_pos[0] / self.w
             self.rotation[1] = -rel_pos[1] / self.h
             
-    def handle_input(self, events, pressed_keys):
+    def handle_input(self, events, pressed_keys, fps):
+        mod = 60/(fps+1)
         for event in events:
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if self.clicking == False:
@@ -392,25 +393,25 @@ class main:
                 self.clicking = False
                 self.start_click = [pygame.mouse.get_pos()[0], pygame.mouse.get_pos()[1]]
         if pressed_keys[pygame.K_UP]:
-            self.viewpos[1] += 0.1
+            self.viewpos[1] += 0.1*mod
         if pressed_keys[pygame.K_DOWN]:
-            self.viewpos[1] -= 0.1
+            self.viewpos[1] -= 0.1*mod
         if pressed_keys[pygame.K_LEFT]:
-            self.viewpos[0] -= 0.1
+            self.viewpos[0] -= 0.1*mod
         if pressed_keys[pygame.K_RIGHT]:
-            self.viewpos[0] += 0.1
+            self.viewpos[0] += 0.1*mod
         if pressed_keys[pygame.K_PAGEUP]:
-            self.viewpos[2] -= 0.1
+            self.viewpos[2] -= 0.1*mod
         if pressed_keys[pygame.K_PAGEDOWN]:
-            self.viewpos[2] += 0.1
+            self.viewpos[2] += 0.1*mod
         if pressed_keys[pygame.K_e]:
-            self.rotation[1] += 0.01
+            self.rotation[1] += 0.01*mod
         if pressed_keys[pygame.K_q]:
-            self.rotation[1] -= 0.01
+            self.rotation[1] -= 0.01*mod
         if pressed_keys[pygame.K_w]:
-            self.rotation[0] += 0.01
+            self.rotation[0] += 0.01*mod
         if pressed_keys[pygame.K_s]:
-            self.rotation[0] -= 0.01
+            self.rotation[0] -= 0.01*mod
             
     def make(self):
         vertices = [(-1,-1,-1),#0
@@ -557,7 +558,7 @@ class main:
 
         self.dest = np.empty((self.h,self.w,4), dtype=cl.cltypes.uint)
         self.dest_buf = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.dest)
-        self.prg.draw_tris(self.queue, (self.h, self.w), None, self.cl_tris, self.cl_out, self.tex_coords, cl.cltypes.uint(self.np_points.shape[0]), self.cl_colours, self.cl_tile_layers, self.cl_tile_layer, self.tex, self.dest_buf).wait()
+        self.prg.draw_tris(self.queue, (self.h, self.w), (self.tilesizex, self.tilesizey), self.cl_tris, self.cl_out, self.tex_coords, cl.cltypes.uint(self.np_points.shape[0]), self.cl_colours, self.cl_tile_layers, self.cl_tile_layer, self.tex, self.dest_buf).wait()
         cl.enqueue_copy(self.queue, self.dest, self.dest_buf)
 
         surf = pygame.surfarray.make_surface(self.dest[:,:,:3])

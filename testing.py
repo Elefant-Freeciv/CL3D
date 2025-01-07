@@ -128,7 +128,7 @@ while false:
         m.handle_input(events, pressed_keys)
     if sum(fpss)/len(fpss) < 60:
         fast_enough = False
-        print("Cube count: ", (len(m.np_points)-9)/36)
+        print("Cube count: ", (len(m.np_tris)-3)/12)
   
 profiler.disable()
 stats = pstats.Stats(profiler).sort_stats("tottime")

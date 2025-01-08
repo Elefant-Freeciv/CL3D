@@ -105,15 +105,16 @@ while false:
     t=time.time()
     fpss = []
     while time.time() < t+3:
+        fps_val = int(clock.get_fps())
         dt = clock.tick(75)/1000.0
         m.update(dt)
-        fpss.append(clock.get_fps())
+        fpss.append(fps_val)
 # #         if clock.get_fps() < 58 and time.time() > t+2:
 # #             fast_enough = False
 # #             pygame.quit()
 # #             print("Cube count: ", (len(m.np_points)-9)/36)
 # #             sys.exit()
-        fps = font.render(str(int(clock.get_fps())), 1, (0, 0, 0))
+        fps = font.render(str(fps_val), 1, (0, 0, 0))
         render_surface.fill((255, 255, 255))
         m.render(render_surface, font)
         main_screen.blit(render_surface, (0, 0))
@@ -125,7 +126,7 @@ while false:
             if event.type == pygame.QUIT:
                 pygame.quit()
                 false = False
-        m.handle_input(events, pressed_keys)
+        m.handle_input(events, pressed_keys, fps_val)
     if sum(fpss)/len(fpss) < 60:
         fast_enough = False
         print("Cube count: ", (len(m.np_tris)-3)/12)

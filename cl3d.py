@@ -86,8 +86,8 @@ class main:
         #define tilesize (uint2)({self.tilesizey}, {self.tilesizex})
 
         typedef int tile_layer[{self.y}][{self.x}];
-        typedef uint4 scr_img[{self.h}][{self.w}];
-        typedef uint4 tex_img[256][256][256];
+        typedef uchar4 scr_img[{self.h}][{self.w}];
+        typedef uchar4 tex_img[256][256][256];
         '''+'''//CL//
 
         
@@ -165,7 +165,7 @@ class main:
             return 1/z;
         }
         
-        uint4 texture_pixel(int2 pos, int i, float z, __global tex_img tex, __constant float8 *tex_coords, float4 p1, float4 p2, float4 p3)
+        uchar4 texture_pixel(int2 pos, int i, float z, __global tex_img tex, __constant float8 *tex_coords, float4 p1, float4 p2, float4 p3)
         {   
             float2 px = (float2)(convert_float(pos.x),convert_float(pos.y));
             float3 bary = barycentric(px, p1, p2, p3);
@@ -188,7 +188,7 @@ class main:
             }
             else
             {
-                return (uint4)(255, 0, 180, 0);
+                return (uchar4)(255, 0, 180, 0);
             }
         }
         
@@ -277,7 +277,7 @@ class main:
                 int2 pos = (int2)(get_global_id(0), get_global_id(1));
                 int2 tile = (int2)(pos.x/tilesize.x, pos.y/tilesize.y);
                 
-                screen[pos.x][pos.y] = (uint4)(255,255,255,255);//(tile.x*2.5,tile.y*2.5,255,255));//(uint4)(pos.x,pos.y,convert_int(tris[0].x),255));
+                screen[pos.x][pos.y] = (uchar4)(255,255,255,255);//(tile.x*2.5,tile.y*2.5,255,255));//(uint4)(pos.x,pos.y,convert_int(tris[0].x),255));
                 float old_pixel_depth = 100000;
                 float test_pixel_depth;
                 for (int i = 0; i<tri_counts[tile.x][tile.y]; i++)
@@ -290,7 +290,7 @@ class main:
                         test_pixel_depth = pixel_depth(pos, p1, p2, p3);
                         if(test_pixel_depth < old_pixel_depth)
                         {
-                            uint4 colour = texture_pixel(pos, tile_maps[i][tile.x][tile.y], test_pixel_depth, tex, tex_coords, p1, p2, p3);
+                            uchar4 colour = texture_pixel(pos, tile_maps[i][tile.x][tile.y], test_pixel_depth, tex, tex_coords, p1, p2, p3);
                             // custom fragment shader here
                             //colour /= (convert_uint(test_pixel_depth*10));
                             if (colour[3] != 0)
@@ -356,10 +356,10 @@ class main:
 #         print(np_model)
         self.src_img1 = Image.open('Tex.png').convert('RGBA')
         self.src_img2 = Image.open('Tex2.png').convert('RGBA')
-        self.src = np.zeros((2,256,256,4), dtype=cl.cltypes.uint)
+        self.src = np.zeros((2,256,256,4), dtype=cl.cltypes.uchar)
         #for i in range(0,255):
-        self.src[0] = np.array(self.src_img1, dtype=cl.cltypes.uint)
-        self.src[1] = np.array(self.src_img2, dtype=cl.cltypes.uint)
+        self.src[0] = np.array(self.src_img1, dtype=cl.cltypes.uchar)
+        self.src[1] = np.array(self.src_img2, dtype=cl.cltypes.uchar)
         self.tex = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.src)
         
         np_screen = np.array([[self.w, self.h]], dtype=np.float32)
@@ -556,7 +556,7 @@ class main:
         np_out = np.empty((self.y, self.x), dtype=np.int32)
         cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
 
-        self.dest = np.empty((self.h,self.w,4), dtype=cl.cltypes.uint)
+        self.dest = np.empty((self.h,self.w,4), dtype=cl.cltypes.uchar)
         self.dest_buf = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.dest)
         self.prg.draw_tris(self.queue, (self.h, self.w), (self.tilesizex, self.tilesizey), self.cl_tris, self.cl_out, self.tex_coords, cl.cltypes.uint(self.np_points.shape[0]), self.cl_colours, self.cl_tile_layers, self.cl_tile_layer, self.tex, self.dest_buf).wait()
         cl.enqueue_copy(self.queue, self.dest, self.dest_buf)

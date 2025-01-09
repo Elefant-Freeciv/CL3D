@@ -79,7 +79,7 @@ class main:
         self.clicking = False
         self.start_click = []
         self.ctx = cl.create_some_context()
-        self.queue = cl.CommandQueue(self.ctx)
+        self.queue = cl.CommandQueue(self.ctx, properties=cl.command_queue_properties.PROFILING_ENABLE)
         self.prg = cl.Program(self.ctx,
         f'''
 
@@ -553,8 +553,8 @@ class main:
         self.make_tiles1(self.queue, (self.mapsize, self.y, self.x), None, self.cl_tris, self.cl_out, self.cl_tile_maps, self.cl_tile_layers)
         self.make_tiles2(self.queue, (self.y,self.x), None, self.cl_tile_maps, self.cl_tile_layers, self.cl_tile_layer, cl.cltypes.uint(self.np_tris.shape[0]))
         
-        np_out = np.empty((self.y, self.x), dtype=np.int32)
-        cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
+#         np_out = np.empty((self.y, self.x), dtype=np.int32)
+#         cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
 
         self.dest = np.empty((self.h,self.w,4), dtype=cl.cltypes.uchar)
         self.dest_buf = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.dest)

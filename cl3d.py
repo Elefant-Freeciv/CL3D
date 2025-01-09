@@ -86,6 +86,7 @@ class main:
         #define tilesize (uint2)({self.tilesizey}, {self.tilesizex})
 
         typedef int tile_layer[{self.y}][{self.x}];
+        typedef uchar bool_layer[{self.y}][{self.x}];
         typedef uchar4 scr_img[{self.h}][{self.w}];
         typedef uchar4 tex_img[256][256][256];
         '''+'''//CL//
@@ -169,7 +170,6 @@ class main:
         {   
             float2 px = (float2)(convert_float(pos.x),convert_float(pos.y));
             float3 bary = barycentric(px, p1, p2, p3);
-            //printf("%i", i);
             float2 st0 = tex_coords[i].s01;
             float2 st1 = tex_coords[i].s23;
             float2 st2 = tex_coords[i].s45;
@@ -211,7 +211,7 @@ class main:
         __kernel void make_tiles1(
                                     __global const uint4 *tris,
                                     __global const float4 *points,
-                                    __global tile_layer *bool_map,
+                                    __global bool_layer *bool_map,
                                     __global tile_layer *tile_layers
                                  )
         {
@@ -246,7 +246,7 @@ class main:
             if (a || b || c || d || e || f){bool_map[gid][tile.x][tile.y] = 1;}
         }
         
-        __kernel void make_tiles2(__global tile_layer *bool_map, __global tile_layer *out, __global tile_layer tri_count, uint tcount)
+        __kernel void make_tiles2(__global bool_layer *bool_map, __global tile_layer *out, __global tile_layer tri_count, uint tcount)
         {
             int2 tile = (int2)(get_global_id(0), get_global_id(1));
             tri_count[tile.x][tile.y]=0;
@@ -267,30 +267,38 @@ class main:
             __constant uint4 *tris,
             __constant float4 *points,
             __constant float8 *tex_coords,
-            uint pcount,
-            __global const uint4 *colours,
+            __global const uchar4 *colours,
             __constant tile_layer *tile_maps,
             __constant tile_layer tri_counts,
             __global tex_img tex,
             __global scr_img screen)
             {
                 int2 pos = (int2)(get_global_id(0), get_global_id(1));
-                int2 tile = (int2)(pos.x/tilesize.x, pos.y/tilesize.y);
-                
+                int2 tile = (int2)(get_group_id(0),get_group_id(1));
+                int tri_count = tri_counts[tile.x][tile.y];
                 screen[pos.x][pos.y] = (uchar4)(255,255,255,255);//(tile.x*2.5,tile.y*2.5,255,255));//(uint4)(pos.x,pos.y,convert_int(tris[0].x),255));
                 float old_pixel_depth = 100000;
                 float test_pixel_depth;
-                for (int i = 0; i<tri_counts[tile.x][tile.y]; i++)
+                uchar4 colour;
+                for (int i = 0; i<tri_count; i++)
                 {
-                    float4 p1 = points[tris[tile_maps[i][tile.x][tile.y]].x];
-                    float4 p2 = points[tris[tile_maps[i][tile.x][tile.y]].y];
-                    float4 p3 = points[tris[tile_maps[i][tile.x][tile.y]].z];
+                    int tris_index = tile_maps[i][tile.x][tile.y];
+                    float4 p1 = points[tris[tris_index].x];
+                    float4 p2 = points[tris[tris_index].y];
+                    float4 p3 = points[tris[tris_index].z];
                     if(point_in_triangle(pos, p1, p2, p3))
                     {
                         test_pixel_depth = pixel_depth(pos, p1, p2, p3);
                         if(test_pixel_depth < old_pixel_depth)
                         {
-                            uchar4 colour = texture_pixel(pos, tile_maps[i][tile.x][tile.y], test_pixel_depth, tex, tex_coords, p1, p2, p3);
+                            if (tex_coords[tris_index].s7 == 1)
+                            {
+                                colour = colours[tris_index];
+                            }
+                            else
+                            {
+                                colour = texture_pixel(pos, tris_index, test_pixel_depth, tex, tex_coords, p1, p2, p3);
+                            }
                             // custom fragment shader here
                             //colour /= (convert_uint(test_pixel_depth*10));
                             if (colour[3] != 0)
@@ -317,13 +325,13 @@ class main:
         triangles = [(0,1,2,0),#x axis
                 (3,4,5,0),#y axis
                 (6,7,8,0)]#z axis
-        tex_coords = [(0, 0, 255, 0, 0, 255,1,0),
-                    (0, 0, 255, 0, 0, 255,1,0),
-                    (0, 0, 255, 0, 0, 255,1,0)]
-        colours = [(255,0,0,255),
-                   (0,255,0,255),
-                   (0,0,255,255)]
-        self.np_colours = np.array(colours, dtype="uint")
+        tex_coords = [(0, 0, 255, 0, 0, 255,1,1),
+                    (0, 0, 255, 0, 0, 255,1,1),
+                    (0, 0, 255, 0, 0, 255,1,1)]
+        colours = [(0,0,0,255),
+                   (0,0,0,255),
+                   (0,0,0,255)]
+        self.np_colours = np.array(colours, dtype=cl.cltypes.uchar)
         print(self.np_colours)
         self.cl_colours = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_colours)
         points = []
@@ -487,11 +495,11 @@ class main:
                    (100, 0, 100, 255),
                    (100, 0, 100, 255)]
         colours = []
-        for colour in c:
-            colours.append(colour)
         for colour in self.np_colours:
             colours.append(colour)
-        self.np_colours = np.array(colours, dtype="uint")
+        for colour in c:
+            colours.append(colour)
+        self.np_colours = np.array(colours, dtype=cl.cltypes.uchar)
         self.cl_colours = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_colours)
         
     def rgba2rgb(self, rgba, background=(0,0,0)):
@@ -558,7 +566,7 @@ class main:
 
         self.dest = np.empty((self.h,self.w,4), dtype=cl.cltypes.uchar)
         self.dest_buf = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.dest)
-        self.prg.draw_tris(self.queue, (self.h, self.w), (self.tilesizex, self.tilesizey), self.cl_tris, self.cl_out, self.tex_coords, cl.cltypes.uint(self.np_points.shape[0]), self.cl_colours, self.cl_tile_layers, self.cl_tile_layer, self.tex, self.dest_buf).wait()
+        self.prg.draw_tris(self.queue, (self.h, self.w), (self.tilesizex, self.tilesizey), self.cl_tris, self.cl_out, self.tex_coords, self.cl_colours, self.cl_tile_layers, self.cl_tile_layer, self.tex, self.dest_buf).wait()
         cl.enqueue_copy(self.queue, self.dest, self.dest_buf)
 
         surf = pygame.surfarray.make_surface(self.dest[:,:,:3])

@@ -84,6 +84,7 @@ class main:
         f'''
 
         #define tilesize (uint2)({self.tilesizey}, {self.tilesizex})
+        #define tilecount (uint2)({self.y}, {self.x})
 
         typedef int tile_layer[{self.y}][{self.x}];
         typedef uchar bool_layer[{self.y}][{self.x}];
@@ -134,6 +135,16 @@ class main:
             bool c = (x >= min(p1.x, p2.x) && x <= max(p1.x, p2.x));
             if (a && b && c){return true;}
             else {return false;}
+        }
+        
+        float axis_intersect(bool x_or_y,
+                            float4 p1,
+                            float4 p2,
+                            int offset
+                            )
+        {
+            float m = (p1.y-p2.y)/(p1.x-p2.x);
+            float b = -m*p1.x+p1.y;
         }
         
         float my_distance(float4 p1, float4 p2)
@@ -209,6 +220,46 @@ class main:
         }
         
         __kernel void make_tiles1(
+                                    __global const uint4 *tris,
+                                    __global const float4 *points,
+                                    __global bool_layer *bool_map,
+                                    __global tile_layer *tile_layers
+                                 )
+        {
+            int gid = get_global_id(0);
+            uint4 tri = tris[gid];
+            bool_layer layer;
+            uchar corners[tilecount.x+1][tilecount.y+1];
+            float4 p1 = points[tri.x];
+            float4 p2 = points[tri.y];
+            float4 p3 = points[tri.z];
+            int4 P1 = convert_int(p1);
+            int4 P2 = convert_int(p2);
+            int4 P3 = convert_int(p3);
+            float xlines1[tilecount.x+1];
+            float xlines2[tilecount.x+1];
+            float xlines3[tilecount.x+1];
+            float ylines1[tilecount.y+1];
+            float ylines2[tilecount.y+1];
+            float ylines3[tilecount.y+1];
+            //int xmax = max(max(P1.x/tilesize.x, P2.x/tilesize.x), max(P2.x/tilesize.x, P3.x/tilesize.x))
+            //int xmin = min(min(P1.x/tilesize.x, P2.x/tilesize.x), min(P2.x/tilesize.x, P3.x/tilesize.x))
+            //int ymax = max(max(P1.y/tilesize.y, P2.y/tilesize.y), max(P2.y/tilesize.y, P3.y/tilesize.y))
+            //int ymin = min(min(P1.y/tilesize.y, P2.y/tilesize.y), min(P2.y/tilesize.y, P3.y/tilesize.y))
+            layer[P1.x/tilesize.x][P1.y/tilesize.y] = 1;
+            layer[P2.x/tilesize.x][P2.y/tilesize.y] = 1;
+            layer[P3.x/tilesize.x][P3.y/tilesize.y] = 1;
+            for (int i = 0; i <= tilecount.x; i++)
+            {
+                xlines1[i] = ;
+                for (int j = 0; j <= tilecount.y; j++)
+                {
+                    corner[i][j] = point_in_triangle((int2)(i*tilesize.x, j*tilesize.y), p1, p2, p3);
+                }
+            }
+        }
+        
+        __kernel void old_make_tiles1(
                                     __global const uint4 *tris,
                                     __global const float4 *points,
                                     __global bool_layer *bool_map,

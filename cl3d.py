@@ -641,8 +641,8 @@ class main:
         self.make_tiles1(self.queue, (self.mapsize, self.y, self.x), None, self.cl_tris, self.cl_out, self.cl_tile_maps, self.cl_tile_layers)
         self.make_tiles2(self.queue, (self.y,self.x), None, self.cl_tile_maps, self.cl_tile_layers, self.cl_tile_layer, cl.cltypes.uint(self.np_tris.shape[0]))
         
-#         np_out = np.empty((self.y, self.x), dtype=np.int32)
-#         cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
+        np_out = np.empty((self.y, self.x), dtype=np.int32)
+        cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
 
         self.dest = np.empty((self.h,self.w,4), dtype=cl.cltypes.uchar)
         self.dest_buf = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.dest)
@@ -655,6 +655,6 @@ class main:
         render_surface.blit(surf, (0, 0))
         verts = font.render(str(len(self.np_points)), 1, (0, 0, 0))
         render_surface.blit(verts, (0, 30))
-#         for i in range(self.y):
-#             for j in range(self.x):
-#                 render_surface.blit(font.render(str(np_out[i][j]), 1, (0, 0, 0)), (j*self.tilesizex, i*self.tilesizey))
+        for i in range(self.y):
+            for j in range(self.x):
+                render_surface.blit(font.render(str(np_out[i][j]), 1, (0, 0, 0)), (j*self.tilesizex, i*self.tilesizey))

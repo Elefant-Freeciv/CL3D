@@ -638,7 +638,7 @@ class main:
         self.cl_tile_maps = cl.Buffer(self.ctx, mf.READ_WRITE, (4*self.y*self.x*self.mapsize))
         self.cl_tile_layer = cl.Buffer(self.ctx, mf.READ_WRITE, (4*self.y*self.x))
         self.cl_tile_layers = cl.Buffer(self.ctx, mf.READ_WRITE, (4*self.y*self.x*self.mapsize))
-        self.make_tiles1(self.queue, (self.mapsize, self.y, self.x), None, self.cl_tris, self.cl_out, self.cl_tile_maps, self.cl_tile_layers)
+        self.make_tiles1(self.queue, (self.mapsize,), None, self.cl_tris, self.cl_out, self.cl_tile_maps, self.cl_tile_layers)
         self.make_tiles2(self.queue, (self.y,self.x), None, self.cl_tile_maps, self.cl_tile_layers, self.cl_tile_layer, cl.cltypes.uint(self.np_tris.shape[0]))
         
         np_out = np.empty((self.y, self.x), dtype=np.int32)

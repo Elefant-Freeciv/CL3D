@@ -213,6 +213,23 @@ class main:
             }
         }
         
+        void bool_map_copy(__global bool_layer out, local bool_layer in)
+        {
+            /*for (int i = 0; i <= tilecount.x; i++)
+            {
+                for (int j = 0; j <= tilecount.y; j++)
+                {
+                    if (true)
+                    {
+                        out[i][j] = in[i][j];
+                    }
+                }
+            }*/
+            //wait_group_events(1, (w,0));
+
+
+        }
+        
         __kernel void vertex(__constant float4 *points,
                              __constant float4 mat[4],
                              __constant float2 *screen,
@@ -238,7 +255,7 @@ class main:
         {
             int gid = get_global_id(0);
             uint4 tri = tris[gid];
-            bool_layer layer;
+            local bool_layer layer;
             uchar corners[XCOUNT][YCOUNT];
             float4 p1 = points[tri.x];
             float4 p2 = points[tri.y];
@@ -246,46 +263,68 @@ class main:
             int4 P1 = convert_int4(p1);
             int4 P2 = convert_int4(p2);
             int4 P3 = convert_int4(p3);
-            layer[P1.x/tilesize.x][P1.y/tilesize.y] = 1;
-            layer[P2.x/tilesize.x][P2.y/tilesize.y] = 1;
-            layer[P3.x/tilesize.x][P3.y/tilesize.y] = 1;
-            for (int i = 0; i <= tilecount.y; i++)
-            {
-                int a = axis_intersect(1, p1, p2, i*16);
-                int b = axis_intersect(1, p1, p3, i*16);
-                int c = axis_intersect(1, p2, p3, i*16);
-                layer[a/16][i] = 1;
-                layer[a/16][i-1] = 1;
-                layer[b/16][i] = 1;
-                layer[b/16][i-1] = 1;
-                layer[c/16][i] = 1;
-                layer[c/16][i-1] = 1;
-            }
+            int a, b, c;
+            bool d;
+            if (P1.x>=0 && P1.y/tilesize.y<=tilecount.y){layer[P1.x/tilesize.x][P1.y/tilesize.y] = 1;}
+            if (P2.x>=0 && P2.y/tilesize.y<=tilecount.y){layer[P2.x/tilesize.x][P2.y/tilesize.y] = 1;}
+            if (P3.x>=0 && P3.y/tilesize.y<=tilecount.y){layer[P3.x/tilesize.x][P3.y/tilesize.y] = 1;}
             for (int i = 0; i <= tilecount.x; i++)
             {
-                int a = axis_intersect(0, p1, p2, i*16);
-                int b = axis_intersect(0, p1, p3, i*16);
-                int c = axis_intersect(0, p2, p3, i*16);
-                layer[i][a/16] = 1;
-                layer[i-1][a/16] = 1;
-                layer[i][b/16] = 1;
-                layer[i-1][b/16] = 1;
-                layer[i][c/16] = 1;
-                layer[i-1][c/16] = 1;
+                a = axis_intersect(0, p1, p2, i*16);
+                b = axis_intersect(0, p1, p3, i*16);
+                c = axis_intersect(0, p2, p3, i*16);
+                if(a>=0 && a/16<=tilecount.y)
+                {
+                    layer[i][a/16] = 1;
+                    layer[i-1][a/16] = 1;
+                }
+                if(b>=0 && b/16<=tilecount.y)
+                {
+                    layer[i][b/16] = 1;
+                    layer[i-1][b/16] = 1;
+                }
+                if(c>=0 && c/16<=tilecount.y)
+                {
+                    layer[i][c/16] = 1;
+                    layer[i-1][c/16] = 1;
+                }
                 for (int j = 0; j <= tilecount.y; j++)
                 {
-                    bool d = point_in_triangle((int2)(i*tilesize.x, j*tilesize.y), p1, p2, p3);
+                    d = point_in_triangle((int2)(i*tilesize.x, j*tilesize.y), p1, p2, p3);
                     if(d)
                     {
                         layer[i][j] = 1;
                         layer[i-1][j] = 1;
                         layer[i][j-1] = 1;
                         layer[i-1][j-1] = 1;
-                        bool_map[gid][i][j] = layer[i][j];
                     }
                 }
             }
-            
+            for (int i = 0; i <= tilecount.y; i++)
+            {
+                a = axis_intersect(1, p1, p2, i*16);
+                b = axis_intersect(1, p1, p3, i*16);
+                c = axis_intersect(1, p2, p3, i*16);
+                if(a>=0 && a/16<=tilecount.x)
+                {
+                    layer[a/16][i] = 1;
+                    layer[a/16][i-1] = 1;
+                }
+                if(b>=0 && b/16<=tilecount.x)
+                {
+                    layer[b/16][i] = 1;
+                    layer[b/16][i-1] = 1;
+                }
+                if(c>=0 && c/16<=tilecount.x)
+                {
+                    layer[c/16][i] = 1;
+                    layer[c/16][i-1] = 1;
+                }
+            }
+            //bool_map_copy(bool_map[gid], layer);
+            size_t size = sizeof(layer);
+            event_t w = async_work_group_copy((global uchar *)&bool_map[gid], (local uchar *)&layer, size, 0);
+            //barrier(CLK_LOCAL_MEM_FENCE);
         }
         
         __kernel void old_make_tiles1(

@@ -139,7 +139,7 @@ class main:
             else {return false;}
         }
         
-        int axis_intersect(bool x_or_y,
+        float axis_intersect(bool x_or_y,
                             float4 p1,
                             float4 p2,
                             int offset
@@ -149,11 +149,11 @@ class main:
             float b = -m*p1.x+p1.y;
             if (x_or_y)
             {
-                return convert_int((m*offset)+b);
+                return (m*offset)+b;
             }
             else
             {
-                return convert_int((offset-b)/m);
+                return (offset-b)/m;
             }
         }
         
@@ -213,19 +213,18 @@ class main:
             }
         }
         
-        void bool_map_copy(__global bool_layer out, local bool_layer in)
+        void bool_map_copy(__global bool_layer out, bool_layer in)
         {
-            /*for (int i = 0; i <= tilecount.x; i++)
+            for (int i = 0; i <= tilecount.x; i++)
             {
                 for (int j = 0; j <= tilecount.y; j++)
                 {
-                    if (true)
+                    if (in[i][j])
                     {
-                        out[i][j] = in[i][j];
+                        out[i][j] = 1;
                     }
                 }
-            }*/
-            //wait_group_events(1, (w,0));
+            }
 
 
         }
@@ -263,30 +262,35 @@ class main:
             int4 P1 = convert_int4(p1);
             int4 P2 = convert_int4(p2);
             int4 P3 = convert_int4(p3);
-            int a, b, c;
+            float a, b, c;
             bool d;
-            if (P1.x>=0 && P1.y/tilesize.y<=tilecount.y){layer[P1.x/tilesize.x][P1.y/tilesize.y] = 1;}
-            if (P2.x>=0 && P2.y/tilesize.y<=tilecount.y){layer[P2.x/tilesize.x][P2.y/tilesize.y] = 1;}
-            if (P3.x>=0 && P3.y/tilesize.y<=tilecount.y){layer[P3.x/tilesize.x][P3.y/tilesize.y] = 1;}
+            //printf("{%f|%f}", p1.x/tilesize.x, p1.y/tilesize.y);
+            //if (p1.x>=0 && P1.y/tilesize.y<=tilecount.y){layer[P1.x/tilesize.x][P1.y/tilesize.y] = 1;}
+            //if (p2.x>=0 && P2.y/tilesize.y<=tilecount.y){layer[P2.x/tilesize.x][P2.y/tilesize.y] = 1;}
+            //if (p3.x>=0 && P3.y/tilesize.y<=tilecount.y){layer[P3.x/tilesize.x][P3.y/tilesize.y] = 1;}
             for (int i = 0; i <= tilecount.x; i++)
             {
-                a = axis_intersect(0, p1, p2, i*16);
-                b = axis_intersect(0, p1, p3, i*16);
-                c = axis_intersect(0, p2, p3, i*16);
-                if(a>=0 && a/16<=tilecount.y)
+                a = axis_intersect(1, p1, p2, i*16);//compute the y value of the intersection of the line p1, p2 and x=i*16
+                b = axis_intersect(1, p1, p3, i*16);//compute the y value of the intersection of the line p1, p3 and x=i*16
+                c = axis_intersect(1, p2, p3, i*16);//compute the y value of the intersection of the line p2, p3 and x=i*16
+                //if (a != 0){}
+                
+                if(a>=0 && a/16<tilecount.y && a>min(p1.y, p2.y) && a<max(p1.y, p2.y))
+                /*if a is in the screen, and greater than the min y value of p1,p2 and less than the max y value of p1,p2*/
                 {
-                    layer[i][a/16] = 1;
-                    layer[i-1][a/16] = 1;
+                    //printf("{%f|%f|%f}", p1.y, p2.y, a);
+                    layer[i][convert_int(a/16)] = 1;
+                    layer[i-1][convert_int(a/16)] = 1;
                 }
-                if(b>=0 && b/16<=tilecount.y)
+                if(b>=0 && b/16<tilecount.y && a>min(p1.y, p3.y) && a<max(p1.y, p3.y))
                 {
-                    layer[i][b/16] = 1;
-                    layer[i-1][b/16] = 1;
+                    layer[i][convert_int(b/16)] = 1;
+                    layer[i-1][convert_int(b/16)] = 1;
                 }
-                if(c>=0 && c/16<=tilecount.y)
+                if(c>=0 && c/16<tilecount.y && c>min(p3.y, p2.y) && c<max(p3.y, p2.y))
                 {
-                    layer[i][c/16] = 1;
-                    layer[i-1][c/16] = 1;
+                    layer[i][convert_int(c/16)] = 1;
+                    layer[i-1][convert_int(c/16)] = 1;
                 }
                 for (int j = 0; j <= tilecount.y; j++)
                 {
@@ -294,17 +298,36 @@ class main:
                     if(d)
                     {
                         layer[i][j] = 1;
-                        layer[i-1][j] = 1;
-                        layer[i][j-1] = 1;
-                        layer[i-1][j-1] = 1;
+                        if (i>0){layer[i-1][j] = 1;}
+                        if (j>0){layer[i][j-1] = 1;}
+                        if (i>0 && j>0){layer[i-1][j-1] = 1;}
                     }
                 }
             }
             for (int i = 0; i <= tilecount.y; i++)
             {
-                a = axis_intersect(1, p1, p2, i*16);
-                b = axis_intersect(1, p1, p3, i*16);
-                c = axis_intersect(1, p2, p3, i*16);
+            
+                a = axis_intersect(0, p1, p2, i*16);
+                b = axis_intersect(0, p1, p3, i*16);
+                c = axis_intersect(0, p2, p3, i*16);
+                if(a>=0 && a/16<=tilecount.y && a>min(p1.y, p2.y) && a<max(p1.y, p2.y) && i>min(p1.x, p2.x) && i<max(p1.x, p2.x))
+                {
+                    layer[i][a/16] = 1;
+                    layer[i-1][a/16] = 1;
+                }
+                if(b>=0 && b/16<=tilecount.y && a>min(p1.y, p3.y) && a<max(p1.y, p3.y) && i>min(p1.x, p3.x) && i<max(p1.x, p3.x))
+                {
+                    layer[i][b/16] = 1;
+                    layer[i-1][b/16] = 1;
+                }
+                if(c>=0 && c/16<=tilecount.y && c>min(p3.y, p2.y) && c<max(p3.y, p2.y) && i>min(p3.x, p2.x) && i<max(p3.x, p2.x))
+                {
+                    layer[i][c/16] = 1;
+                    layer[i-1][c/16] = 1;
+                }
+                a = axis_intersect(0, p1, p2, i*16);
+                b = axis_intersect(0, p1, p3, i*16);
+                c = axis_intersect(0, p2, p3, i*16);
                 if(a>=0 && a/16<=tilecount.x)
                 {
                     layer[a/16][i] = 1;
@@ -321,9 +344,18 @@ class main:
                     layer[c/16][i-1] = 1;
                 }
             }
+            //global bool_layer *ptr = &bool_map[gid];
+            //ptr = layer;
+            for (int i = 0; i <= tilecount.x; i++)
+            {
+                for (int j = 0; j <= tilecount.y; j++)
+                {
+                    bool_map[gid][i][j] = layer[i][j];
+                }
+            }
             //bool_map_copy(bool_map[gid], layer);
-            size_t size = sizeof(layer);
-            event_t w = async_work_group_copy((global uchar *)&bool_map[gid], (local uchar *)&layer, size, 0);
+            //size_t size = sizeof(layer);
+            //async_work_group_copy((global uchar *)&bool_map[gid], (local uchar *)&layer, size, 0);
             //barrier(CLK_LOCAL_MEM_FENCE);
         }
         
@@ -680,8 +712,8 @@ class main:
         self.make_tiles1(self.queue, (self.mapsize,), None, self.cl_tris, self.cl_out, self.cl_tile_maps, self.cl_tile_layers)
         self.make_tiles2(self.queue, (self.y,self.x), None, self.cl_tile_maps, self.cl_tile_layers, self.cl_tile_layer, cl.cltypes.uint(self.np_tris.shape[0]))
         
-        np_out = np.empty((self.y, self.x), dtype=np.int32)
-        cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
+#         np_out = np.empty((self.y, self.x), dtype=np.int32)
+#         cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
 
         self.dest = np.empty((self.h,self.w,4), dtype=cl.cltypes.uchar)
         self.dest_buf = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.dest)
@@ -694,6 +726,6 @@ class main:
         render_surface.blit(surf, (0, 0))
         verts = font.render(str(len(self.np_points)), 1, (0, 0, 0))
         render_surface.blit(verts, (0, 30))
-        for i in range(self.y):
-            for j in range(self.x):
-                render_surface.blit(font.render(str(np_out[i][j]), 1, (0, 0, 0)), (j*self.tilesizex, i*self.tilesizey))
+#         for i in range(self.y):
+#             for j in range(self.x):
+#                 render_surface.blit(font.render(str(np_out[i][j]), 1, (0, 0, 0)), (j*self.tilesizex, i*self.tilesizey))

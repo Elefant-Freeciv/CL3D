@@ -64,6 +64,7 @@ class Math3D:
 
 class main:
     def __init__(self, h, w, target_tile_size=16):
+        np.set_printoptions(threshold = np.inf)
         self.h = math.ceil(h/target_tile_size)*target_tile_size
         self.w = math.ceil(w/target_tile_size)*target_tile_size
         self.y = int(self.h / target_tile_size)
@@ -246,118 +247,94 @@ class main:
         }
         
         __kernel void make_tiles1(
-                                    __global const uint4 *tris,
-                                    __global const float4 *points,
-                                    __global bool_layer *bool_map,
-                                    __global tile_layer *tile_layers
-                                 )
-        {
-            int gid = get_global_id(0);
-            uint4 tri = tris[gid];
-            local bool_layer layer;
-            uchar corners[XCOUNT][YCOUNT];
-            float4 p1 = points[tri.x];
-            float4 p2 = points[tri.y];
-            float4 p3 = points[tri.z];
-            int4 P1 = convert_int4(p1);
-            int4 P2 = convert_int4(p2);
-            int4 P3 = convert_int4(p3);
-            float a, b, c;
-            bool d;
-            //printf("{%f|%f}", p1.x/tilesize.x, p1.y/tilesize.y);
-            //if (p1.x>=0 && P1.y/tilesize.y<=tilecount.y){layer[P1.x/tilesize.x][P1.y/tilesize.y] = 1;}
-            //if (p2.x>=0 && P2.y/tilesize.y<=tilecount.y){layer[P2.x/tilesize.x][P2.y/tilesize.y] = 1;}
-            //if (p3.x>=0 && P3.y/tilesize.y<=tilecount.y){layer[P3.x/tilesize.x][P3.y/tilesize.y] = 1;}
-            for (int i = 0; i <= tilecount.x; i++)
-            {
-                a = axis_intersect(1, p1, p2, i*16);//compute the y value of the intersection of the line p1, p2 and x=i*16
-                b = axis_intersect(1, p1, p3, i*16);//compute the y value of the intersection of the line p1, p3 and x=i*16
-                c = axis_intersect(1, p2, p3, i*16);//compute the y value of the intersection of the line p2, p3 and x=i*16
-                //if (a != 0){}
-                
-                if(a>=0 && a/16<tilecount.y && a>min(p1.y, p2.y) && a<max(p1.y, p2.y))
-                /*if a is in the screen, and greater than the min y value of p1,p2 and less than the max y value of p1,p2*/
-                {
-                    //printf("{%f|%f|%f}", p1.y, p2.y, a);
-                    layer[i][convert_int(a/16)] = 1;
-                    layer[i-1][convert_int(a/16)] = 1;
-                }
-                if(b>=0 && b/16<tilecount.y && a>min(p1.y, p3.y) && a<max(p1.y, p3.y))
-                {
-                    layer[i][convert_int(b/16)] = 1;
-                    layer[i-1][convert_int(b/16)] = 1;
-                }
-                if(c>=0 && c/16<tilecount.y && c>min(p3.y, p2.y) && c<max(p3.y, p2.y))
-                {
-                    layer[i][convert_int(c/16)] = 1;
-                    layer[i-1][convert_int(c/16)] = 1;
-                }
-                for (int j = 0; j <= tilecount.y; j++)
-                {
-                    d = point_in_triangle((int2)(i*tilesize.x, j*tilesize.y), p1, p2, p3);
-                    if(d)
-                    {
-                        layer[i][j] = 1;
-                        if (i>0){layer[i-1][j] = 1;}
-                        if (j>0){layer[i][j-1] = 1;}
-                        if (i>0 && j>0){layer[i-1][j-1] = 1;}
-                    }
-                }
-            }
-            for (int i = 0; i <= tilecount.y; i++)
-            {
-            
-                a = axis_intersect(0, p1, p2, i*16);
-                b = axis_intersect(0, p1, p3, i*16);
-                c = axis_intersect(0, p2, p3, i*16);
-                if(a>=0 && a/16<=tilecount.y && a>min(p1.y, p2.y) && a<max(p1.y, p2.y) && i>min(p1.x, p2.x) && i<max(p1.x, p2.x))
-                {
-                    layer[i][a/16] = 1;
-                    layer[i-1][a/16] = 1;
-                }
-                if(b>=0 && b/16<=tilecount.y && a>min(p1.y, p3.y) && a<max(p1.y, p3.y) && i>min(p1.x, p3.x) && i<max(p1.x, p3.x))
-                {
-                    layer[i][b/16] = 1;
-                    layer[i-1][b/16] = 1;
-                }
-                if(c>=0 && c/16<=tilecount.y && c>min(p3.y, p2.y) && c<max(p3.y, p2.y) && i>min(p3.x, p2.x) && i<max(p3.x, p2.x))
-                {
-                    layer[i][c/16] = 1;
-                    layer[i-1][c/16] = 1;
-                }
-                a = axis_intersect(0, p1, p2, i*16);
-                b = axis_intersect(0, p1, p3, i*16);
-                c = axis_intersect(0, p2, p3, i*16);
-                if(a>=0 && a/16<=tilecount.x)
-                {
-                    layer[a/16][i] = 1;
-                    layer[a/16][i-1] = 1;
-                }
-                if(b>=0 && b/16<=tilecount.x)
-                {
-                    layer[b/16][i] = 1;
-                    layer[b/16][i-1] = 1;
-                }
-                if(c>=0 && c/16<=tilecount.x)
-                {
-                    layer[c/16][i] = 1;
-                    layer[c/16][i-1] = 1;
-                }
-            }
-            //global bool_layer *ptr = &bool_map[gid];
-            //ptr = layer;
-            for (int i = 0; i <= tilecount.x; i++)
-            {
-                for (int j = 0; j <= tilecount.y; j++)
-                {
-                    bool_map[gid][i][j] = layer[i][j];
-                }
-            }
-            //bool_map_copy(bool_map[gid], layer);
-            //size_t size = sizeof(layer);
-            //async_work_group_copy((global uchar *)&bool_map[gid], (local uchar *)&layer, size, 0);
-            //barrier(CLK_LOCAL_MEM_FENCE);
+    __global const uint4 *tris,
+    __global const float4 *points,
+    __global bool_layer *bool_map,
+    __global tile_layer *tile_layers
+) {
+    int gid = get_global_id(0); // Get the global ID of the current work item
+    uint4 tri = tris[gid]; // Get the triangle indices
+    __local bool_layer layer; // Local memory for layer
+
+    // Retrieve the triangle vertices
+    float4 p1 = points[tri.x];
+    float4 p2 = points[tri.y];
+    float4 p3 = points[tri.z];
+
+    // Convert vertices to integer coordinates
+    int4 P1 = convert_int4(p1);
+    int4 P2 = convert_int4(p2);
+    int4 P3 = convert_int4(p3);
+
+    float a, b, c;
+    bool d;
+
+    // Initialize the local layer to zero
+    for (int i = 0; i <= tilecount.x; i++) {
+        for (int j = 0; j <= tilecount.y; j++) {
+            layer[i][j] = 0;
         }
+    }
+
+    // Loop through x-axis tiles
+    for (int i = 0; i <= tilecount.x; i++) {
+        a = axis_intersect(true, p1, p2, i * tilesize.x); // Intersection with vertical line
+        b = axis_intersect(true, p1, p3, i * tilesize.x);
+        c = axis_intersect(true, p2, p3, i * tilesize.x);
+
+        // Update layer with intersection points
+        if (a >= 0 && a / tilesize.y < tilecount.y && a > min(p1.y, p2.y) && a < max(p1.y, p2.y)) {
+            layer[i][convert_int(a / tilesize.y)] = 1;
+            if (i > 0) layer[i - 1][convert_int(a / tilesize.y)] = 1;
+        }
+        if (b >= 0 && b / tilesize.y < tilecount.y && b > min(p1.y, p3.y) && b < max(p1.y, p3.y)) {
+            layer[i][convert_int(b / tilesize.y)] = 1;
+            if (i > 0) layer[i - 1][convert_int(b / tilesize.y)] = 1;
+        }
+        if (c >= 0 && c / tilesize.y < tilecount.y && c > min(p3.y, p2.y) && c < max(p3.y, p2.y)) {
+            layer[i][convert_int(c / tilesize.y)] = 1;
+            if (i > 0) layer[i - 1][convert_int(c / tilesize.y)] = 1;
+        }
+
+        // Loop through y-axis tiles
+        for (int j = 0; j <= tilecount.y; j++) {
+            d = point_in_triangle((int2)(i * tilesize.x, j * tilesize.y), p1, p2, p3);
+            if (d) {
+                layer[i][j] = 1;
+                if (i > 0) layer[i - 1][j] = 1;
+                if (j > 0) layer[i][j - 1] = 1;
+                if (i > 0 && j > 0) layer[i - 1][j - 1] = 1;
+            }
+        }
+    }
+
+    // Similar processing for horizontal intersections
+    for (int i = 0; i <= tilecount.y; i++) {
+        a = axis_intersect(false, p1, p2, i * tilesize.y);
+        b = axis_intersect(false, p1, p3, i * tilesize.y);
+        c = axis_intersect(false, p2, p3, i * tilesize.y);
+
+        if (a >= 0 && a / tilesize.x < tilecount.x && a > min(p1.x, p2.x) && a < max(p1.x, p2.x)) {
+            layer[convert_int(a / tilesize.x)][i] = 1;
+            if (i > 0) layer[convert_int(a / tilesize.x)][i - 1] = 1;
+        }
+        if (b >= 0 && b / tilesize.x < tilecount.x && b > min(p1.x, p3.x) && b < max(p1.x, p3.x)) {
+            layer[convert_int(b / tilesize.x)][i] = 1;
+            if (i > 0) layer[convert_int(b / tilesize.x)][i - 1] = 1;
+        }
+        if (c >= 0 && c / tilesize.x < tilecount.x && c > min(p3.x, p2.x) && c < max(p3.x, p2.x)) {
+            layer[convert_int(c / tilesize.x)][i] = 1;
+            if (i > 0) layer[convert_int(c / tilesize.x)][i - 1] = 1;
+        }
+    }
+
+    // Copy local layer to global bool_map
+    for (int i = 0; i <= tilecount.x; i++) {
+        for (int j = 0; j <= tilecount.y; j++) {
+            bool_map[gid][i][j] = layer[i][j];
+        }
+    }
+}
         
         __kernel void old_make_tiles1(
                                     __global const uint4 *tris,
@@ -712,8 +689,9 @@ class main:
         self.make_tiles1(self.queue, (self.mapsize,), None, self.cl_tris, self.cl_out, self.cl_tile_maps, self.cl_tile_layers)
         self.make_tiles2(self.queue, (self.y,self.x), None, self.cl_tile_maps, self.cl_tile_layers, self.cl_tile_layer, cl.cltypes.uint(self.np_tris.shape[0]))
         
-#         np_out = np.empty((self.y, self.x), dtype=np.int32)
-#         cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
+#         self.np_out = np.empty((self.y, self.x, self.mapsize), dtype=cl.cltypes.uchar)
+#         cl.enqueue_copy(self.queue, self.np_out, self.cl_tile_maps)
+#         print(self.np_out)
 
         self.dest = np.empty((self.h,self.w,4), dtype=cl.cltypes.uchar)
         self.dest_buf = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.dest)

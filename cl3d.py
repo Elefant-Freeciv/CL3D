@@ -79,7 +79,7 @@ class main:
         self.clicking = False
         self.start_click = []
         self.ctx = cl.create_some_context()
-        self.queue = cl.CommandQueue(self.ctx, properties=cl.command_queue_properties.PROFILING_ENABLE)
+        self.queue = cl.CommandQueue(self.ctx)
         self.prg = cl.Program(self.ctx,
         f'''
 
@@ -113,16 +113,16 @@ class main:
             else{return false;}
         }
 
-        bool point_in_triangle (int2 pos, float4 v1, float4 v2, float4 v3)
+        bool point_in_triangle (ushort2 pos, float4 v1, float4 v2, float4 v3)
         {
-            float2 pt = (float2)(convert_float(pos.x),convert_float(pos.y));
+            float2 pt = convert_float2(pos);
             return ((orient(v1, v2, pt) && orient(v2, v3, pt) && orient(v3, v1, pt))||(!orient(v1, v2, pt) && !orient(v2, v3, pt) && !orient(v3, v1, pt)));
         }
         
         bool lines_intersect(float4 p1, float4 p2, int4 tilerect)
         {
-            float2 p3 = (float2)(convert_float(tilerect.x), convert_float(tilerect.y));
-            float2 p4 = (float2)(convert_float(tilerect.z), convert_float(tilerect.w));
+            float2 p3 = convert_float2(tilerect.xy);
+            float2 p4 = convert_float2(tilerect.zw);
             float m1 = (p3.y-p4.y)/(p3.x-p4.x);
             float m2 = (p1.y-p2.y)/(p1.x-p2.x);
             float b1 = -m1*p3.x+p3.y;
@@ -158,17 +158,18 @@ class main:
             return (float3)(u, v, w);
         }
         
-        float pixel_depth(int2 pos, float4 p1, float4 p2, float4 p3)
+        float pixel_depth(ushort2 pos, float4 p1, float4 p2, float4 p3)
         {
             float2 px = (float2)(convert_float(pos.x),convert_float(pos.y));
+            //printf("{%f|%f|%f|%f|%f|%f|%f|%f|%f}", p1.x,p1.y,p1.w,p2.x,p2.y,p2.w,p3.x,p3.y,p3.w);
             float3 bary = barycentric(px, p1, p2, p3);
             float z = bary.x * 1/p1.w + bary.y * 1/p2.w + bary.z * 1/p3.w;
             return 1/z;
         }
         
-        uchar4 texture_pixel(int2 pos, int i, float z, __global tex_img tex, __constant float8 *tex_coords, float4 p1, float4 p2, float4 p3)
+        uchar4 texture_pixel(ushort2 pos, int i, float z, __global tex_img tex, __constant float8 *tex_coords, float4 p1, float4 p2, float4 p3)
         {   
-            float2 px = (float2)(convert_float(pos.x),convert_float(pos.y));
+            float2 px = convert_float2(pos);
             float3 bary = barycentric(px, p1, p2, p3);
             float2 st0 = tex_coords[i].s01;
             float2 st1 = tex_coords[i].s23;
@@ -232,10 +233,10 @@ class main:
             e = (p3.x >= tilerect.x && p3.x <= tilerect.z);
             f = (p3.y >= tilerect.y && p3.y <= tilerect.w);
             if ((a && b) || (c && d) || (e && f)){bool_map[gid][tile.x][tile.y] = 1;}
-            a = point_in_triangle((int2)(tilerect.x, tilerect.y), p1, p2, p3);
-            b = point_in_triangle((int2)(tilerect.x, tilerect.w), p1, p2, p3);
-            c = point_in_triangle((int2)(tilerect.z, tilerect.y), p1, p2, p3);
-            d = point_in_triangle((int2)(tilerect.z, tilerect.w), p1, p2, p3);
+            a = point_in_triangle((ushort2)(tilerect.x, tilerect.y), p1, p2, p3);
+            b = point_in_triangle((ushort2)(tilerect.x, tilerect.w), p1, p2, p3);
+            c = point_in_triangle((ushort2)(tilerect.z, tilerect.y), p1, p2, p3);
+            d = point_in_triangle((ushort2)(tilerect.z, tilerect.w), p1, p2, p3);
             if (a || b || c || d){bool_map[gid][tile.x][tile.y] = 1;}
             a = lines_intersect(p1, p2, tilerect);
             b = lines_intersect(p2, p3, tilerect);
@@ -248,7 +249,7 @@ class main:
         
         __kernel void make_tiles2(__global bool_layer *bool_map, __global tile_layer *out, __global tile_layer tri_count, uint tcount)
         {
-            int2 tile = (int2)(get_global_id(0), get_global_id(1));
+            ushort2 tile = (ushort2)(get_global_id(0), get_global_id(1));
             tri_count[tile.x][tile.y]=0;
             int j = 0;
             for (int i = 0; i<(tcount); i++)
@@ -273,8 +274,8 @@ class main:
             __global tex_img tex,
             __global scr_img screen)
             {
-                int2 pos = (int2)(get_global_id(0), get_global_id(1));
-                int2 tile = (int2)(get_group_id(0),get_group_id(1));
+                ushort2 pos = (ushort2)(get_global_id(0), get_global_id(1));
+                ushort2 tile = (ushort2)(get_group_id(0),get_group_id(1));
                 int tri_count = tri_counts[tile.x][tile.y];
                 screen[pos.x][pos.y] = (uchar4)(255,255,255,255);//(tile.x*2.5,tile.y*2.5,255,255));//(uint4)(pos.x,pos.y,convert_int(tris[0].x),255));
                 float old_pixel_depth = 100000;

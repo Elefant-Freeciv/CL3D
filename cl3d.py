@@ -78,8 +78,43 @@ class main:
         self.delta = 0.0
         self.clicking = False
         self.start_click = []
-        self.ctx = cl.create_some_context()
+        #self.ctx = cl.create_some_context()
+        print(cl.get_platforms()[1].get_devices(device_type=cl.device_type.CPU))
+        self.ctx = cl.Context(dev_type=cl.device_type.GPU,
+            properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[0])])
+        self.ctx2 = cl.Context(dev_type=cl.device_type.CPU,
+            properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[1])])
+        self.queue2 = cl.CommandQueue(self.ctx2)
         self.queue = cl.CommandQueue(self.ctx)
+        self.prg2 = cl.Program(self.ctx2,
+        '''
+        float4 mul(__constant float4 mat[4], const float4 point)
+        {
+            float4 rtn;
+            rtn.x = dot(mat[0], point);
+            rtn.y = dot(mat[1], point);
+            rtn.z = dot(mat[2], point);
+            rtn.w = dot(mat[3], point);
+            return rtn;
+
+        }
+
+        __kernel void vertex(__constant float4 *points,
+                             __constant float4 mat[4],
+                             __constant float2 *screen,
+                             __global float4 *out)
+        {
+            float4 workvec;
+            int gid = get_global_id(0);
+            //run custom vertex code
+            workvec = mul(mat, points[gid]);
+            workvec.w = -workvec.z;
+            workvec = (float4)(workvec.x / workvec.w, workvec.y / workvec.w, workvec.z / workvec.w, -workvec.z);
+            float x = ((workvec.x + 1) / 2) * screen[0].x;
+            float y = ((-workvec.y + 1) / 2) * screen[0].y;
+            out[gid] = (float4)(y, x, 0, workvec.w);
+        }
+        ''').build()
         self.prg = cl.Program(self.ctx,
         f'''
 
@@ -373,11 +408,11 @@ class main:
         
         np_screen = np.array([[self.w, self.h]], dtype=np.float32)
 
-        self.cl_screen = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_screen)
+        self.cl_screen = cl.Buffer(self.ctx2, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_screen)
         self.cl_out = cl.Buffer(self.ctx, mf.WRITE_ONLY, self.np_points.nbytes)
         print(len(vertices))
         
-        self.vertex_shader = self.prg.vertex
+        self.vertex_shader = self.prg2.vertex
         self.make_tiles1 = self.prg.make_tiles1
         self.make_tiles2 = self.prg.make_tiles2
         
@@ -548,12 +583,17 @@ class main:
         np_view = np.dot(np_view, np_model)
         
         mf = cl.mem_flags
-        self.cl_points = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.np_points)
-        self.cl_view = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_view)
+        self.cl_points = cl.Buffer(self.ctx2, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.np_points)
+        self.cl_view = cl.Buffer(self.ctx2, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_view)
         self.cl_model = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_model)
         self.cl_out = cl.Buffer(self.ctx, mf.READ_WRITE, self.np_points.nbytes)
+        self.cl2_out = cl.Buffer(self.ctx2, mf.READ_WRITE, self.np_points.nbytes)
         
-        self.vertex_shader(self.queue, (self.np_points.shape[0],), None, self.cl_points, self.cl_view, self.cl_screen, self.cl_out)
+        self.vertex_shader(self.queue2, (self.np_points.shape[0],), None, self.cl_points, self.cl_view, self.cl_screen, self.cl2_out)
+
+        np_inter = np.empty(self.np_points.shape, dtype=np.float32)
+        cl.enqueue_copy(self.queue2, np_inter, self.cl2_out)#, src_origin=(0,0,0), dst_origin=(0,0,0), region=(self.np_points.nbytes/16,16,1))
+        cl.enqueue_copy(self.queue, self.cl_out, np_inter)
 
         self.mapsize = int(self.np_tris.shape[0])
         self.cl_tile_maps = cl.Buffer(self.ctx, mf.READ_WRITE, (4*self.y*self.x*self.mapsize))

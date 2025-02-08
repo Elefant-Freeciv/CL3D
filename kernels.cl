@@ -307,9 +307,9 @@ __kernel void make_tiles_stage_4(
     int gid = get_global_id(0);
     int2 tile = (int2)(get_global_id(1), get_global_id(2));
     //printf("BIng");
-    printf("{%i|%i|%i|%i}", pre_layers[gid][(tile.x/3)][(tile.y/4)], (tile.x/3), (tile.y/4), gid);
+    //printf("{%i|%i|%i|%i}", pre_layers[gid][(tile.x/3)][(tile.y/4)], (tile.x/3), (tile.y/4), gid);
     bool_map[gid][tile.x][tile.y] = 0;
-    uint4 tri = tris[gid];//pre_layers[gid][(tile.x/3)-1][(tile.y/4)-1]];
+    uint4 tri = tris[pre_layers[gid][(tile.x/3)-1][(tile.y/4)-1]];
     //int null = convert_int(sqrt((float)(45783234*38783678347))/(float)(sqrt(5518.8418529828)));
     float4 p1 = points[tri.x];
     float4 p2 = points[tri.y];
@@ -398,7 +398,7 @@ __kernel void make_tiles2(__global bool_layer *bool_map, __global tile_layer *ou
     ushort2 tile = (ushort2)(get_global_id(0), get_global_id(1));
     //tri_count[tile.x][tile.y]=0;
     int j = 0;
-    for (int i = 0; i<(tri_count[tile.x][tile.y]); i++)
+    for (int i = 0; i<tcount; i++)
     {
         if (bool_map[i][tile.x][tile.y]==1)
         {

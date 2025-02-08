@@ -1,4 +1,4 @@
-file = open("plane.obj").read().splitlines()
+file = open("cube.obj").read().splitlines()
 output = open("plane.cl3d", "w")
 output.write("[")
 for line in file:
@@ -23,7 +23,7 @@ print(tex_coords)
 for line in file:
     if line.startswith("f "):
         l = line.split()
-        #output.write("("+str(int(l[1].split("/")[0])-1)+", "+str(int(l[2].split("/")[0])-1)+", "+str(int(l[3].split("/")[0])-1)+"),\n")
+        output.write("("+str(int(l[1].split("/")[0])-1)+", "+str(int(l[2].split("/")[0])-1)+", "+str(int(l[3].split("/")[0])-1)+"),\n")
         #print("("+l[1].split("/")[0]+", "+l[2].split("/")[0]+", "+l[3].split("/")[0]+"),\n")
         #print(l)
         a=tex_coords[int(l[1].split("/")[1])-1]

@@ -78,7 +78,7 @@ class main:
         self.delta = 0.0
         self.clicking = False
         self.start_click = []
-        self.ctx = cl.Context(dev_type=cl.device_type.CPU,
+        self.ctx = cl.Context(dev_type=cl.device_type.GPU,
             properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[1])])
 #         self.ctx = cl.Context(dev_type=cl.device_type.GPU,
 #             properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[0])])
@@ -216,8 +216,8 @@ class main:
     def make(self):
         vertices = []
         file = open("plane.obj").read().splitlines()
-        output = open("plane.cl3d", "w")
-        output.write("[")
+#         output = open("plane.cl3d", "w")
+#         output.write("[")
         for line in file:
             if line.startswith("v "):
                 l = line.split()
@@ -294,7 +294,160 @@ class main:
             colours.append(colour)
         self.np_colours = np.array(colours, dtype=cl.cltypes.uchar)
         self.cl_colours = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_colours)
-        
+  
+#     def make(self):
+#         vertices = [(-1,-1,-1),#0
+#                     (1,-1,-1),#1
+#                     (-1,1,-1),#2
+#                     (1,1,-1),#3
+#                     (-1,-1,1),#4
+#                     (-1,1,1),#5
+#                     (1,-1,1),#6
+#                     (1,1,1)]#7
+#         triangles = [(0,1,2),
+#                     (2,1,3),
+#                     (4,5,6),
+#                     (5,6,7),
+#                     (0,1,4),
+#                     (1,4,6),
+#                     (2,3,5),
+#                     (3,5,7),
+#                     (1,3,7),
+#                     (1,6,7),
+#                     (0,2,4),
+#                     (4,2,5)]
+#         
+#         tex_coords = [(0, 255, 255, 255, 0, 0,1,0),
+#                       (0, 0, 255, 255, 255,0,1,0),
+#                       (0, 255, 255, 255, 0, 0,0,0),
+#                       (0, 0, 255, 255, 255,0,0,0),
+#                       (0, 255, 255, 255, 0, 0,1,0),
+#                       (0, 0, 255, 255, 255,0,1,0),
+#                       (0, 255, 255, 255, 0, 0,0,0),
+#                       (0, 0, 255, 255, 255,0,0,0),
+#                       (0, 255, 0, 0, 255, 0,1,0),
+#                       (0, 255, 255, 255, 255,0,1,0),
+#                       (0, 255, 255, 255, 0, 0,0,0),
+#                       (0, 0, 255, 255, 255,0,0,0)
+#                       ]
+#         mf = cl.mem_flags
+#         
+#         tris = []
+#         tcount = self.np_points.shape[0]
+#         for tri in self.np_tris:
+#             tris.append((tri[0], tri[1], tri[2], 1))
+#         for tri in triangles:
+#             tris.append((tri[0]+tcount, tri[1]+tcount, tri[2]+tcount, 1))
+#         print(tris)
+#         self.np_tris = np.array(tris, dtype=cl.cltypes.uint)
+# 
+#         self.cl_tris = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_tris)
+#         
+#         for coord in tex_coords:
+#             self.texc.append(coord)
+#         print("{",self.texc,"}")
+#         self.np_tex_coords = np.array(self.texc, dtype=np.float32)
+#         self.tex_coords = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_tex_coords)
+#         
+#         points = []
+#         for vert in self.np_points:
+#             points.append((vert[0], vert[1], vert[2], 1.0))
+#         for v in vertices:
+#             points.append((v[0], v[1], v[2], 1.0))
+#         self.np_points = np.array(points, dtype=np.float32)
+#         
+#         c = [(255, 100, 100, 255),
+#                    (255, 100, 100, 255),
+#                    (255, 255, 100, 255),
+#                    (255, 255, 100, 255),
+#                    (255, 100, 255, 255),
+#                    (255, 100, 255, 255),
+#                    (100, 255, 100, 255),
+#                    (100, 255, 100, 255),
+#                    (100, 255, 255, 255),
+#                    (100, 255, 255, 255),
+#                    (100, 0, 100, 255),
+#                    (100, 0, 100, 255)]
+#         colours = []
+#         for colour in self.np_colours:
+#             colours.append(colour)
+#         for colour in c:
+#             colours.append(colour)
+#         self.np_colours = np.array(colours, dtype=cl.cltypes.uchar)
+#         self.cl_colours = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_colours)
+  
+#     def make(self):
+#         vertices = [(1.000000, 1.000000, -1.000000),
+# (1.000000, -1.000000, -1.000000),
+# (1.000000, 1.000000, 1.000000),
+# (1.000000, -1.000000, 1.000000),
+# (-1.000000, 1.000000, -1.000000),
+# (-1.000000, -1.000000, -1.000000),
+# (-1.000000, 1.000000, 1.000000),
+# (-1.000000, -1.000000, 1.000000)
+# ]
+#         triangles = [(0, 4, 6),
+#                      (0, 2, 6),
+# (3, 2, 6),
+# (7, 6, 4),
+# (5, 1, 3),
+# (1, 0, 2),
+# (5, 4, 0)
+# ]
+#         
+#         tex_coords = [(128.5, 159.375, 128.5, 223.125, 64.75, 223.125, 1, 0),
+# (64.75, 95.625, 64.75, 159.375, 1.0, 159.375, 1, 0),
+# (256.0, 95.625, 256.0, 159.375, 192.25, 159.375, 1, 0),
+# (128.5, 31.875, 128.5, 95.625, 64.75, 95.625, 1, 0),
+# (128.5, 95.625, 128.5, 159.375, 64.75, 159.375, 1, 0),
+# (192.25, 95.625, 192.25, 159.375, 128.5, 159.375, 1, 0)
+#                       ]
+#         mf = cl.mem_flags
+#         
+#         tris = []
+#         tcount = self.np_points.shape[0]
+#         for tri in self.np_tris:
+#             tris.append((tri[0], tri[1], tri[2], 1))
+#         for tri in triangles:
+#             tris.append((tri[0]+tcount, tri[1]+tcount, tri[2]+tcount, 1))
+#         print(tris)
+#         self.np_tris = np.array(tris, dtype=cl.cltypes.uint)
+# 
+#         self.cl_tris = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_tris)
+#         
+#         for coord in tex_coords:
+#             self.texc.append(coord)
+#         print("{",self.texc,"}")
+#         self.np_tex_coords = np.array(self.texc, dtype=np.float32)
+#         self.tex_coords = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_tex_coords)
+#         
+#         points = []
+#         for vert in self.np_points:
+#             points.append((vert[0], vert[1], vert[2], 1.0))
+#         for v in vertices:
+#             points.append((v[0], v[1], v[2], 1.0))
+#         self.np_points = np.array(points, dtype=np.float32)
+#         
+#         c = [(255, 100, 100, 255),
+#                    (255, 100, 100, 255),
+#                    (255, 255, 100, 255),
+#                    (255, 255, 100, 255),
+#                    (255, 100, 255, 255),
+#                    (255, 100, 255, 255),
+#                    (100, 255, 100, 255),
+#                    (100, 255, 100, 255),
+#                    (100, 255, 255, 255),
+#                    (100, 255, 255, 255),
+#                    (100, 0, 100, 255),
+#                    (100, 0, 100, 255)]
+#         colours = []
+#         for colour in self.np_colours:
+#             colours.append(colour)
+#         for colour in c:
+#             colours.append(colour)
+#         self.np_colours = np.array(colours, dtype=cl.cltypes.uchar)
+#         self.cl_colours = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_colours)
+
     def rgba2rgb(self, rgba, background=(0,0,0)):
         row, col, ch = rgba.shape
 
@@ -364,74 +517,74 @@ class main:
         self.cl_tile_layer = cl.Buffer(self.ctx, mf.READ_WRITE, (4*self.y*self.x))
         self.cl_tile_prelayer = cl.Buffer(self.ctx, mf.READ_WRITE, int(4*self.y*self.x/12))
         #self.cl_tile_layers = cl.Buffer(self.ctx, mf.READ_WRITE, (4*self.y*self.x*self.mapsize))
-        #self.make_tiles1(self.queue, (self.mapsize,), None, self.cl_tris, self.cl_out, self.cl_tile_maps)#, self.cl_tile_layers)
+        self.make_tiles1(self.queue, (self.mapsize,), None, self.cl_tris, self.cl_out, self.cl_tile_maps)#, self.cl_tile_layers)
         #self.prg.old_make_tiles1(self.queue, (self.mapsize, self.y, self.x), None, self.cl_tris, self.cl_out, self.cl_tile_maps)
-        #self.count_tiles(self.queue, (self.y,self.x), None, self.cl_tile_maps, self.cl_tile_layer, cl.cltypes.uint(self.np_tris.shape[0]))
-        
-#         np_out = np.empty((self.y, self.x), dtype=np.int32)
-#         cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
-#         print(4*self.y*self.x*self.mapsize)
-#         print(4*self.y*self.x*np_out.max())
-#         self.cl_tile_layers = cl.Buffer(self.ctx, mf.READ_WRITE, (4*self.y*self.x*np_out.max()))
-        
-#         self.make_tiles2(self.queue, (self.y,self.x), None, self.cl_tile_maps, self.cl_tile_layers, self.cl_tile_layer, cl.cltypes.uint(np_out.max()))
-        
-        self.make_tiles_stage_1(self.queue,
-                                (self.mapsize, int(self.y/4), int(self.x/3)),
-                                None,
-                                self.cl_tris,
-                                self.cl_out,
-                                self.cl_tile_premaps)
-        
-        self.make_tiles_stage_2(self.queue,
-                                (int(self.y/4), int(self.x/3)),
-                                None,
-                                self.cl_tile_premaps,
-                                self.cl_tile_prelayer,
-                                cl.cltypes.uint(self.np_tris.shape[0]))
-        
-        np_out2 = np.empty((int(self.y/4), int(self.x/3)), dtype=np.int32)
-        cl.enqueue_copy(self.queue, np_out2, self.cl_tile_prelayer)
-
-        self.cl_tile_prelayers = cl.Buffer(self.ctx, mf.READ_WRITE, int(4*self.y*self.x*np_out2.max()/12))
-        cl.enqueue_fill_buffer(self.queue, self.cl_tile_prelayers, np.int32(0), 0, int(4*self.y*self.x*np_out2.max()/12))
-        
-        self.make_tiles_stage_3(self.queue,
-                                (int(self.y/4),
-                                 int(self.x/3)),
-                                None,
-                                self.cl_tile_premaps,
-                                self.cl_tile_prelayers,
-                                self.cl_tile_prelayer,
-                                cl.cltypes.uint(self.np_tris.shape[0]))#cl.cltypes.uint(np_out2.max()))
-        
-        np_out3 = np.empty((np_out2.max(), int(self.y/4), int(self.x/3)), dtype=np.int32)
-        #np_out3 = np.empty_like(self.np_tris)
-        cl.enqueue_copy(self.queue, np_out3, self.cl_tile_prelayers)
-        print(np_out3.max())
-        #print(np_out3)
-        #np_out3 = np.empty((np_out2.max(), int(self.y/4), int(self.x/3)), dtype=np.int32)
-        np_out3 = np.empty_like(self.np_tris)
-        cl.enqueue_copy(self.queue, np_out3, self.cl_tris)
-        print(np_out3.nbytes)
-        print(np_out3)
-        
-        self.cl_tris = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_out3)#self.np_tris)
-        
-        self.make_tiles_stage_4(self.queue,
-                                (np_out2.max(), self.y, self.x),
-                                None,
-                                self.cl_tris,
-                                self.cl_out,
-                                self.cl_tile_maps,
-                                self.cl_tile_prelayers)
-        
         self.count_tiles(self.queue, (self.y,self.x), None, self.cl_tile_maps, self.cl_tile_layer, cl.cltypes.uint(self.np_tris.shape[0]))
+        
         np_out = np.empty((self.y, self.x), dtype=np.int32)
         cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
+        print(4*self.y*self.x*self.mapsize)
+        print(4*self.y*self.x*np_out.max())
         self.cl_tile_layers = cl.Buffer(self.ctx, mf.READ_WRITE, (4*self.y*self.x*np_out.max()))
-        self.make_tiles2(self.queue, (self.y,self.x), None, self.cl_tile_maps, self.cl_tile_layers, self.cl_tile_layer, cl.cltypes.uint(np_out.max()))
-
+        
+        self.make_tiles2(self.queue, (self.y,self.x), None, self.cl_tile_maps, self.cl_tile_layers, self.cl_tile_layer, cl.cltypes.uint(self.np_tris.shape[0]))
+        
+#         self.make_tiles_stage_1(self.queue,
+#                                 (self.mapsize, int(self.y/4), int(self.x/3)),
+#                                 None,
+#                                 self.cl_tris,
+#                                 self.cl_out,
+#                                 self.cl_tile_premaps)
+#         
+#         self.make_tiles_stage_2(self.queue,
+#                                 (int(self.y/4), int(self.x/3)),
+#                                 None,
+#                                 self.cl_tile_premaps,
+#                                 self.cl_tile_prelayer,
+#                                 cl.cltypes.uint(self.np_tris.shape[0]))
+#         
+#         np_out2 = np.empty((int(self.y/4), int(self.x/3)), dtype=np.int32)
+#         cl.enqueue_copy(self.queue, np_out2, self.cl_tile_prelayer)
+# 
+#         self.cl_tile_prelayers = cl.Buffer(self.ctx, mf.READ_WRITE, int(4*self.y*self.x*np_out2.max()/12))
+#         cl.enqueue_fill_buffer(self.queue, self.cl_tile_prelayers, np.int32(0), 0, int(4*self.y*self.x*np_out2.max()/12))
+#         
+#         self.make_tiles_stage_3(self.queue,
+#                                 (int(self.y/4),
+#                                  int(self.x/3)),
+#                                 None,
+#                                 self.cl_tile_premaps,
+#                                 self.cl_tile_prelayers,
+#                                 self.cl_tile_prelayer,
+#                                 cl.cltypes.uint(self.np_tris.shape[0]))#cl.cltypes.uint(np_out2.max()))
+#         
+#         np_out3 = np.empty((np_out2.max(), int(self.y/4), int(self.x/3)), dtype=np.int32)
+#         #np_out3 = np.empty_like(self.np_tris)
+#         cl.enqueue_copy(self.queue, np_out3, self.cl_tile_prelayers)
+#         print(np_out3.max())
+#         #print(np_out3)
+#         #np_out3 = np.empty((np_out2.max(), int(self.y/4), int(self.x/3)), dtype=np.int32)
+#         np_out3 = np.empty_like(self.np_tris)
+#         cl.enqueue_copy(self.queue, np_out3, self.cl_tris)
+#         print(np_out3.nbytes)
+#         print(np_out3)
+#         
+#         self.cl_tris = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_out3)#self.np_tris)
+#         
+#         self.make_tiles_stage_4(self.queue,
+#                                 (np_out2.max(), self.y, self.x),
+#                                 None,
+#                                 self.cl_tris,
+#                                 self.cl_out,
+#                                 self.cl_tile_maps,
+#                                 self.cl_tile_prelayers)
+#         
+#         self.count_tiles(self.queue, (self.y,self.x), None, self.cl_tile_maps, self.cl_tile_layer, cl.cltypes.uint(self.np_tris.shape[0])).wait()
+#         np_out = np.empty((self.y, self.x), dtype=np.int32)
+#         cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
+#         self.cl_tile_layers = cl.Buffer(self.ctx, mf.READ_WRITE, (4*self.y*self.x*np_out.max()))
+#         self.make_tiles2(self.queue, (self.y,self.x), None, self.cl_tile_maps, self.cl_tile_layers, self.cl_tile_layer, cl.cltypes.uint(self.np_tris.shape[0]))
+# 
 #         np_out = np.empty((self.y, self.x), dtype=np.int32)
 #         cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
 
@@ -450,7 +603,6 @@ class main:
         self.cl_tile_layers.release()
         self.cl_tile_layer.release()
         self.cl_tile_maps.release()
-        #self.cl2_out.release()
         self.cl_out.release()
         self.cl_model.release()
         self.cl_view.release()
@@ -459,6 +611,6 @@ class main:
 #         for i in range(self.y):
 #             for j in range(self.x):
 #                 render_surface.blit(font.render(str(np_out[i][j]), 1, (0, 0, 0)), (j*self.tilesizex, i*self.tilesizey))
-        for i in range(int(self.y/4)):
-            for j in range(int(self.x/3)):
-                render_surface.blit(font.render(str(np_out2[i][j]), 1, (0, 0, 0)), (j*self.tilesizex*3, i*self.tilesizey*4))
+#         for i in range(int(self.y/4)):
+#             for j in range(int(self.x/3)):
+#                 render_surface.blit(font.render(str(np_out2[i][j]), 1, (0, 0, 0)), (j*self.tilesizex*3, i*self.tilesizey*4))

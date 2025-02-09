@@ -517,8 +517,8 @@ class main:
         self.cl_tile_layer = cl.Buffer(self.ctx, mf.READ_WRITE, (4*self.y*self.x))
         self.cl_tile_prelayer = cl.Buffer(self.ctx, mf.READ_WRITE, int(4*self.y*self.x/12))
         #self.cl_tile_layers = cl.Buffer(self.ctx, mf.READ_WRITE, (4*self.y*self.x*self.mapsize))
-        self.make_tiles1(self.queue, (self.mapsize,), None, self.cl_tris, self.cl_out, self.cl_tile_maps)#, self.cl_tile_layers)
-        #self.prg.old_make_tiles1(self.queue, (self.mapsize, self.y, self.x), None, self.cl_tris, self.cl_out, self.cl_tile_maps)
+        #self.make_tiles1(self.queue, (self.mapsize,), None, self.cl_tris, self.cl_out, self.cl_tile_maps)#, self.cl_tile_layers)
+        self.prg.old_make_tiles1(self.queue, (self.mapsize, self.y, self.x), None, self.cl_tris, self.cl_out, self.cl_tile_maps)
         self.count_tiles(self.queue, (self.y,self.x), None, self.cl_tile_maps, self.cl_tile_layer, cl.cltypes.uint(self.np_tris.shape[0]))
         
         np_out = np.empty((self.y, self.x), dtype=np.int32)
@@ -547,7 +547,7 @@ class main:
 #         cl.enqueue_copy(self.queue, np_out2, self.cl_tile_prelayer)
 # 
 #         self.cl_tile_prelayers = cl.Buffer(self.ctx, mf.READ_WRITE, int(4*self.y*self.x*np_out2.max()/12))
-#         cl.enqueue_fill_buffer(self.queue, self.cl_tile_prelayers, np.int32(0), 0, int(4*self.y*self.x*np_out2.max()/12))
+# #         cl.enqueue_fill_buffer(self.queue, self.cl_tile_prelayers, np.int32(0), 0, int(4*self.y*self.x*np_out2.max()/12))
 #         
 #         self.make_tiles_stage_3(self.queue,
 #                                 (int(self.y/4),

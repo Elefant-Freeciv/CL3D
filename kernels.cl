@@ -118,7 +118,7 @@ __kernel void vertex(__constant float4 *points,
     out[gid] = (float4)(y, x, 0, workvec.w);
 }
 
-        void bool_map_copy(__global bool_layer out, bool_layer in)
+void bool_map_copy(__global bool_layer out, bool_layer in)
 {
     for (int i = 0; i <= tilecount.x; i++)
     {
@@ -132,11 +132,11 @@ __kernel void vertex(__constant float4 *points,
     }
 }
 
-        float axis_intersect(bool x_or_y,
-                    float4 p1,
-                    float4 p2,
-                    int offset
-                    )
+float axis_intersect(bool x_or_y,
+            float4 p1,
+            float4 p2,
+            int offset
+            )
 {
     float m = (p1.y-p2.y)/(p1.x-p2.x);
     float b = -m*p1.x+p1.y;
@@ -309,7 +309,7 @@ __kernel void make_tiles_stage_4(
     //printf("BIng");
     //printf("{%i|%i|%i|%i}", pre_layers[gid][(tile.x/3)][(tile.y/4)], (tile.x/3), (tile.y/4), gid);
     bool_map[gid][tile.x][tile.y] = 0;
-    uint4 tri = tris[pre_layers[gid][(tile.x/3)-1][(tile.y/4)-1]];
+    uint4 tri = tris[pre_layers[gid][(tile.x/3)][(tile.y/4)]];
     //int null = convert_int(sqrt((float)(45783234*38783678347))/(float)(sqrt(5518.8418529828)));
     float4 p1 = points[tri.x];
     float4 p2 = points[tri.y];

@@ -92,9 +92,9 @@ uchar4 texture_pixel(ushort2 pos, int i, float z, __global tex_img tex, __consta
     float y = bary.x * st0[1] + bary.y * st1[1] + bary.z * st2[1];
     x *= z, y *= z;
     
-    if(x>=0 && x<=255 && y>=0 && y<=255)
+    if(x>=0 && x<=1023 && y>=0 && y<=1023)
     {
-        return tex[convert_int(tex_coords[i][6])][min(convert_int(x), 255)][min(convert_int(y), 255)];
+        return tex[convert_int(tex_coords[i][6])][min(convert_int(x), 1023)][min(convert_int(y), 1023)];
     }
     else
     {
@@ -228,114 +228,6 @@ __kernel void make_tiles1(
             bool_map[gid][i][j] = layer[i][j];
         }
     }
-}
-
-__kernel void make_tiles_stage_1(
-                            __global const uint4 *tris,
-                            __global const float4 *points,
-                            __global pre_layer *bool_map
-                         )
-{
-    int gid = get_global_id(0);
-    uint4 tri = tris[gid];
-    float4 p1 = points[tri.x];
-    float4 p2 = points[tri.y];
-    float4 p3 = points[tri.z];
-    int2 tile = (int2)(get_global_id(1), get_global_id(2));
-    bool_map[gid][tile.x][tile.y] = 0;
-    bool a, b, c, d, e, f; 
-    int4 tilerect = (int4)(tile.x*tilesize.x*4, tile.y*tilesize.y*3, tile.x*tilesize.x*4+tilesize.x*4, tile.y*tilesize.y*3+tilesize.y*3);
-    a = (p1.x >= tilerect.x && p1.x <= tilerect.z);
-    b = (p1.y >= tilerect.y && p1.y <= tilerect.w);
-    c = (p2.x >= tilerect.x && p2.x <= tilerect.z);
-    d = (p2.y >= tilerect.y && p2.y <= tilerect.w);
-    e = (p3.x >= tilerect.x && p3.x <= tilerect.z);
-    f = (p3.y >= tilerect.y && p3.y <= tilerect.w);
-    if ((a && b) || (c && d) || (e && f)){bool_map[gid][tile.x][tile.y] = 1;}
-    a = point_in_triangle((ushort2)(tilerect.x, tilerect.y), p1, p2, p3);
-    b = point_in_triangle((ushort2)(tilerect.x, tilerect.w), p1, p2, p3);
-    c = point_in_triangle((ushort2)(tilerect.z, tilerect.y), p1, p2, p3);
-    d = point_in_triangle((ushort2)(tilerect.z, tilerect.w), p1, p2, p3);
-    if (a || b || c || d){bool_map[gid][tile.x][tile.y] = 1;}
-    a = lines_intersect(p1, p2, tilerect);
-    b = lines_intersect(p2, p3, tilerect);
-    c = lines_intersect(p3, p1, tilerect);
-    d = lines_intersect(p1, p2, (int4)(tilerect.x,tilerect.w,tilerect.z,tilerect.y));
-    e = lines_intersect(p2, p3, (int4)(tilerect.x,tilerect.w,tilerect.z,tilerect.y));
-    f = lines_intersect(p3, p1, (int4)(tilerect.x,tilerect.w,tilerect.z,tilerect.y));
-    if (a || b || c || d || e || f){bool_map[gid][tile.x][tile.y] = 1;}
-}
-
-
-__kernel void make_tiles_stage_2(__global pre_layer *bool_map, __global preint_layer tri_count, uint tcount)
-{
-    ushort2 tile = (ushort2)(get_global_id(0), get_global_id(1));
-    tri_count[tile.x][tile.y]=0;
-    int j = 0;
-    for (int i = 0; i<(tcount); i++)
-    {
-        if (bool_map[i][tile.x][tile.y]==1)
-        {
-            j++;
-        }
-    }
-    tri_count[tile.x][tile.y]=j;
-}
-
-__kernel void make_tiles_stage_3(__global pre_layer *bool_map, __global preint_layer *out, __global preint_layer tri_count, uint tcount)
-{
-    ushort2 tile = (ushort2)(get_global_id(0), get_global_id(1));
-    int j = 0;
-    for (int i = 0; i<tcount; i++)
-    {
-        if (bool_map[i][tile.x][tile.y]==1)
-        {
-            out[j][tile.x][tile.y]=i;
-            j++;
-        }
-        else {out[j][tile.x][tile.y]=0;}
-    }
-}
-
-__kernel void make_tiles_stage_4(
-                            __global const uint4 *tris,
-                            __global const float4 *points,
-                            __global bool_layer *bool_map,
-                            __global preint_layer *pre_layers
-                         )
-{
-    int gid = get_global_id(0);
-    int2 tile = (int2)(get_global_id(1), get_global_id(2));
-    //printf("BIng");
-    //printf("{%i|%i|%i|%i}", pre_layers[gid][(tile.x/3)][(tile.y/4)], (tile.x/3), (tile.y/4), gid);
-    bool_map[gid][tile.x][tile.y] = 0;
-    uint4 tri = tris[pre_layers[gid][(tile.x/3)][(tile.y/4)]];
-    //int null = convert_int(sqrt((float)(45783234*38783678347))/(float)(sqrt(5518.8418529828)));
-    float4 p1 = points[tri.x];
-    float4 p2 = points[tri.y];
-    float4 p3 = points[tri.z];
-    //tile_layers[gid][tile.x][tile.y] = 0;
-    bool a, b, c, d, e, f; 
-    int4 tilerect = (int4)(tile.x*tilesize.x, tile.y*tilesize.y, tile.x*tilesize.x+tilesize.x, tile.y*tilesize.y+tilesize.y);
-    a = (p1.x >= tilerect.x && p1.x <= tilerect.z);
-    b = (p1.y >= tilerect.y && p1.y <= tilerect.w);
-    c = (p2.x >= tilerect.x && p2.x <= tilerect.z);
-    d = (p2.y >= tilerect.y && p2.y <= tilerect.w);
-    e = (p3.x >= tilerect.x && p3.x <= tilerect.z);
-    f = (p3.y >= tilerect.y && p3.y <= tilerect.w);
-    if ((a && b) || (c && d) || (e && f)){bool_map[gid][tile.x][tile.y] = 1;}
-    a = point_in_triangle((ushort2)(tilerect.x, tilerect.y), p1, p2, p3);
-    b = point_in_triangle((ushort2)(tilerect.x, tilerect.w), p1, p2, p3);
-    c = point_in_triangle((ushort2)(tilerect.z, tilerect.y), p1, p2, p3);
-    d = point_in_triangle((ushort2)(tilerect.z, tilerect.w), p1, p2, p3);
-    if (a || b || c || d){bool_map[gid][tile.x][tile.y] = 1;}
-    a = lines_intersect(p1, p2, tilerect);
-    b = lines_intersect(p2, p3, tilerect);
-    c = lines_intersect(p3, p1, tilerect);
-    d = lines_intersect(p1, p2, (int4)(tilerect.x,tilerect.w,tilerect.z,tilerect.y));
-    e = lines_intersect(p2, p3, (int4)(tilerect.x,tilerect.w,tilerect.z,tilerect.y));
-    f = lines_intersect(p3, p1, (int4)(tilerect.x,tilerect.w,tilerect.z,tilerect.y));
-    if (a || b || c || d || e || f){bool_map[gid][tile.x][tile.y] = 1;}
 }
 
 __kernel void old_make_tiles1(

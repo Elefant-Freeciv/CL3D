@@ -70,6 +70,7 @@ class main:
         self.x = int(self.w / target_tile_size)
         self.tilesizex = target_tile_size
         self.tilesizey = target_tile_size
+        self.pre_dims = (int(self.y/4),int(self.x/6))
         self.viewpos = [0.0, 0.0, -10.0]
         self.rotation = [0.0, 0.0, 0.0]
         self.delta = 0.0
@@ -85,13 +86,15 @@ class main:
 
         #define tilesize (uint2)({self.tilesizey}, {self.tilesizex})
         #define tilecount (uint2)({self.y}, {self.x})
+        #define pre_dims (uint2)({self.pre_dims[0]},{self.pre_dims[1]})
+        #define pre_scale (uint2)(4,6)
         #define XCOUNT {self.tilesizey+1}
         #define YCOUNT {self.tilesizex+1}
 
         typedef int tile_layer[{self.y}][{self.x}];
         typedef uchar bool_layer[{self.y}][{self.x}];
-        typedef uchar pre_layer[{int(self.y/4)}][{int(self.x/3)}];
-        typedef int preint_layer[{int(self.y/4)}][{int(self.x/3)}];
+        typedef uchar pre_layer[{self.pre_dims[0]}][{self.pre_dims[1]}];
+        typedef int preint_layer[{self.pre_dims[0]}][{self.pre_dims[1]}];
         typedef uchar4 scr_img[{self.h}][{self.w}];
         typedef uchar4 tex_img[256][1024][1024];
         '''+open("kernels.cl").read()).build()
@@ -164,6 +167,10 @@ class main:
         self.make_tiles1 = self.prg.make_tiles1
         self.make_tiles2 = self.prg.make_tiles2
         self.count_tiles = self.prg.count_tiles
+        self.tiles1 = self.prg.make_tiles_stage_1
+        self.tiles2 = self.prg.make_tiles_stage_2
+        self.tiles3 = self.prg.make_tiles_stage_3
+        self.tiles4 = self.prg.make_tiles_stage_4
         
         
     def update(self, delta):
@@ -343,17 +350,43 @@ class main:
                            self.cl_out)
 
         self.mapsize = int(self.np_tris.shape[0])
-        self.cl_tile_maps = cl.Buffer(self.ctx, mf.READ_ONLY, (self.y*self.x*self.mapsize))
-        self.cl_tile_premaps = cl.Buffer(self.ctx, mf.READ_ONLY, (int(self.y*self.x*self.mapsize/12)))
+        self.cl_tile_maps = cl.Buffer(self.ctx, mf.READ_WRITE, (self.y*self.x*self.mapsize))
+        self.cl_tile_premaps = cl.Buffer(self.ctx, mf.READ_WRITE, (int(self.y*self.x*self.mapsize/24)))
         self.cl_tile_layer = cl.Buffer(self.ctx, mf.READ_WRITE, (4*self.y*self.x))
-        self.cl_tile_prelayer = cl.Buffer(self.ctx, mf.READ_WRITE, int(4*self.y*self.x/12))
+        self.cl_tile_prelayer = cl.Buffer(self.ctx, mf.READ_WRITE, int(4*self.y*self.x/24))
+        
+        self.tiles1(self.queue, (self.mapsize, self.pre_dims[0], self.pre_dims[1]), None, self.cl_tris, self.cl_out, self.cl_tile_premaps).wait()
+        self.tiles2(self.queue, (self.pre_dims[0], self.pre_dims[1]), None, self.cl_tile_premaps, self.cl_tile_prelayer, cl.cltypes.uint(self.np_tris.shape[0])).wait()
+        np_out2 = np.empty((self.pre_dims[0], self.pre_dims[1]), dtype=np.int32)
+        cl.enqueue_copy(self.queue, np_out2, self.cl_tile_prelayer)
+        self.cl_sorted_tris = cl.Buffer(self.ctx, mf.READ_WRITE, (4*np.sum(np_out2)))
+        self.np_offsets = np.empty((self.pre_dims[0], self.pre_dims[1]), dtype=np.int32)
+        r_offset=0
+        for i in range(self.pre_dims[0]):
+            for j in range(self.pre_dims[1]):
+                self.np_offsets[i][j]=r_offset
+                r_offset += np_out2[i][j]
+        print(self.np_offsets)
+        self.cl_offsets = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_offsets)
+        
+        
+        print(np.sum(np_out2))
+        self.tiles3(self.queue, (self.pre_dims[0], self.pre_dims[1]), None, self.cl_sorted_tris, self.cl_tile_premaps, self.cl_offsets, cl.cltypes.uint(self.np_tris.shape[0])).wait()
+        
+        np_out_l = np.empty((np.sum(np_out2)), dtype=np.int32)
+        cl.enqueue_copy(self.queue, np_out_l, self.cl_sorted_tris)
+        print(np_out_l)
+        
+        self.tiles4(self.queue, (np.sum(np_out2), 4, 6), None, self.cl_sorted_tris, self.cl_offsets, self.cl_tris, self.cl_out, self.cl_tile_maps).wait()
+        
         #self.make_tiles1(self.queue, (self.mapsize,), None, self.cl_tris, self.cl_out, self.cl_tile_maps)#, self.cl_tile_layers)
-        self.prg.old_make_tiles1(self.queue, (self.mapsize, self.y, self.x), None, self.cl_tris, self.cl_out, self.cl_tile_maps)
-        self.count_tiles(self.queue, (self.y,self.x), None, self.cl_tile_maps, self.cl_tile_layer, cl.cltypes.uint(self.np_tris.shape[0]))
+        #self.prg.old_make_tiles1(self.queue, (self.mapsize, self.y, self.x), None, self.cl_tris, self.cl_out, self.cl_tile_maps)
+        self.count_tiles(self.queue, (self.y,self.x), None, self.cl_tile_maps, self.cl_tile_layer, cl.cltypes.uint(self.np_tris.shape[0])).wait()
         
         np_out = np.empty((self.y, self.x), dtype=np.int32)
         cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
-        self.cl_tile_layers = cl.Buffer(self.ctx, mf.READ_WRITE, (4*self.y*self.x*np_out.max()))
+        print(np_out)
+        self.cl_tile_layers = cl.Buffer(self.ctx, mf.READ_WRITE, max(4*self.y*self.x*np_out.max(), 4*self.y*self.x))
         
         self.make_tiles2(self.queue, (self.y,self.x), None, self.cl_tile_maps, self.cl_tile_layers, self.cl_tile_layer, cl.cltypes.uint(self.np_tris.shape[0]))
 
@@ -380,4 +413,10 @@ class main:
 #         for i in range(self.y):
 #             for j in range(self.x):
 #                 render_surface.blit(font.render(str(np_out[i][j]), 1, (0, 0, 0)), (j*self.tilesizex, i*self.tilesizey))
+        for i in range(self.pre_dims[0]):
+            for j in range(self.pre_dims[1]):
+                render_surface.blit(font.render(str(np_out2[i][j]), 1, (0, 0, 0)), (j*self.tilesizex*6, i*self.tilesizey*4))
+
+
+
 

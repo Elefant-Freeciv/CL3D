@@ -13,7 +13,7 @@ m = main(h, w, target_tile_size)
 clock = pygame.time.Clock()
 r = True
 while r == True:
-    dt = clock.tick(60)/1000.0
+    dt = clock.tick(1000)/1000.0
     m.update(dt)
     fps_val = int(clock.get_fps())
     fps = font.render(str(fps_val), 1, (0, 0, 0))

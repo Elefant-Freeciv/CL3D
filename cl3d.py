@@ -76,8 +76,8 @@ class main:
         self.delta = 0.0
         self.clicking = False
         self.start_click = []
-        self.ctx = cl.Context(dev_type=cl.device_type.GPU,
-            properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[0])])
+        self.ctx = cl.Context(dev_type=cl.device_type.CPU,
+            properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[1])])
 #         self.ctx = cl.Context(dev_type=cl.device_type.GPU,
 #             properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[0])])
         self.queue = cl.CommandQueue(self.ctx)
@@ -385,6 +385,8 @@ class main:
         
         np_out = np.empty((self.y, self.x), dtype=np.int32)
         cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
+        print(max(4*self.y*self.x*np_out2.max(), 4*self.y*self.x))
+        print(max(4*self.y*self.x*np_out.max(), 4*self.y*self.x))
         #print(np_out)
         self.cl_tile_layers = cl.Buffer(self.ctx, mf.READ_WRITE, max(4*self.y*self.x*np_out.max(), 4*self.y*self.x))
         

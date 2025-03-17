@@ -277,10 +277,7 @@ __kernel void count_tiles(__global bool_layer *bool_map, __global tile_layer tri
     //bool *boolist = bool_map[*][tile.x][tile.y];
     for (int i = 0; i<(tcount); i++)
     {
-        if (bool_map[i][tile.x][tile.y]==1)
-        {
-            j++;
-        }
+        j+=bool_map[i][tile.x][tile.y];
     }
     tri_count[tile.x][tile.y]=j;
 }
@@ -288,7 +285,6 @@ __kernel void count_tiles(__global bool_layer *bool_map, __global tile_layer tri
 __kernel void make_tiles2(__global bool_layer *bool_map, __global tile_layer *out, __global tile_layer tri_count, uint tcount)
 {
     ushort2 tile = (ushort2)(get_global_id(0), get_global_id(1));
-    //tri_count[tile.x][tile.y]=0;
     int j = 0;
     for (int i = 0; i<tcount; i++)
     {
@@ -296,9 +292,7 @@ __kernel void make_tiles2(__global bool_layer *bool_map, __global tile_layer *ou
         {
             out[j][tile.x][tile.y]=i;
             j++;
-            tri_count[tile.x][tile.y]=j;
         }
-        //else {out[j][tile.x][tile.y]=0;}
     }
 }
 
@@ -343,7 +337,6 @@ __kernel void make_tiles_stage_2(__global pre_layer *bool_map,
     ushort2 tile = (ushort2)(get_global_id(0), get_global_id(1));
     tri_count[tile.x][tile.y]=0;
     int j = 0;
-    //bool *boolist = bool_map[*][tile.x][tile.y];
     for (int i = 0; i<(tcount); i++)
     {
         if (bool_map[i][tile.x][tile.y]==1)
@@ -378,11 +371,10 @@ __kernel void make_tiles_stage_4(__global uint *sorted_tris,
                                  __global const float4 *points,
                                  __global bool_layer *bool_map)
 {
-    int gid = get_global_id(0);//11616
+    int gid = get_global_id(0);
     int2 gids12 = (int2)(get_global_id(1),get_global_id(2));
     int tid = sorted_tris[gid];
     int2 pretile;
-    //int val = gid/(pre_dims.x*pre_dims.y);//484
     for (int i = 0; i<(11*11); i++)
     {
         if (offsets[i/11][i%11] > gid)
@@ -391,12 +383,8 @@ __kernel void make_tiles_stage_4(__global uint *sorted_tris,
             i = 10000;
         }
     }
-    //printf("{%i|%i|%i}", gid, pretile.x, pretile.y);
-    int tile_val = gid%(pre_dims.x*pre_dims.y);//0
-    int2 tile = (int2)((pretile.x*4)+gids12.x,(pretile.y*6)+gids12.y);//0,0
-    printf("{%i|%i|%i}", tid, tile.x, tile.y);
-    //int2 tile = (int2)(get_global_id(0),get_global_id(1));
-    //int2 pretile = (int2)(convert_int(tile.x/pre_scale.x), convert_int(tile.y/pre_scale.y));//0,0
+    int tile_val = gid%(pre_dims.x*pre_dims.y);
+    int2 tile = (int2)((pretile.x*4)+gids12.x,(pretile.y*6)+gids12.y);
     int offset = offsets[pretile.x][pretile.y];
     uint4 tri = tris[tid];
     bool_map[tid][tile.x][tile.y] = 0;
@@ -447,7 +435,6 @@ __kernel void draw_tris(
         for (int i = 0; i<tri_count; i++)
         {
             int tris_index = tile_maps[i][tile.x][tile.y];
-            //printf("|%i|", tris_index);
             float4 p1 = points[tris[tris_index].x];
             float4 p2 = points[tris[tris_index].y];
             float4 p3 = points[tris[tris_index].z];

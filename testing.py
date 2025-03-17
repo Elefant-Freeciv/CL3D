@@ -6,6 +6,8 @@ import cProfile, pstats
 h = 350*2
 w = 525*2
 
+#cliloader -h -dv python3 main.py
+
 ##pygame.init()
 ##main_screen = pygame.display.set_mode((w, h))
 ##render_surface = pygame.Surface((w, h))

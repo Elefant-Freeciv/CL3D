@@ -385,8 +385,8 @@ class main:
         
         np_out = np.empty((self.y, self.x), dtype=np.int32)
         cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
-        print(max(4*self.y*self.x*np_out2.max(), 4*self.y*self.x))
-        print(max(4*self.y*self.x*np_out.max(), 4*self.y*self.x))
+#         print(max(4*self.y*self.x*np_out2.max(), 4*self.y*self.x))
+#         print(max(4*self.y*self.x*np_out.max(), 4*self.y*self.x))
         #print(np_out)
         self.cl_tile_layers = cl.Buffer(self.ctx, mf.READ_WRITE, max(4*self.y*self.x*np_out.max(), 4*self.y*self.x))
         
@@ -415,9 +415,9 @@ class main:
 #         for i in range(self.y):
 #             for j in range(self.x):
 #                 render_surface.blit(font.render(str(np_out[i][j]), 1, (0, 0, 0)), (j*self.tilesizex, i*self.tilesizey))
-        for i in range(self.pre_dims[0]):
-            for j in range(self.pre_dims[1]):
-                render_surface.blit(font.render(str(np_out2[i][j]), 1, (0, 0, 0)), (j*self.tilesizex*6, i*self.tilesizey*4))
+#         for i in range(self.pre_dims[0]):
+#             for j in range(self.pre_dims[1]):
+#                 render_surface.blit(font.render(str(np_out2[i][j]), 1, (0, 0, 0)), (j*self.tilesizex*6, i*self.tilesizey*4))
 
 
 

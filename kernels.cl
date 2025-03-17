@@ -294,6 +294,7 @@ __kernel void make_tiles2(__global bool_layer *bool_map, __global tile_layer *ou
             j++;
         }
     }
+    tri_count[tile.x][tile.y]=j;//DO NOT REMOVE! CAUSES SEG FAULT
 }
 
 __kernel void make_tiles_stage_1(__global const uint4 *tris,

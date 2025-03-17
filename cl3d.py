@@ -366,26 +366,26 @@ class main:
             for j in range(self.pre_dims[1]):
                 self.np_offsets[i][j]=r_offset
                 r_offset += np_out2[i][j]
-        print(self.np_offsets)
+        #print(self.np_offsets)
         self.cl_offsets = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_offsets)
         
         
-        print(np.sum(np_out2))
+        #print(np.sum(np_out2))
         self.tiles3(self.queue, (self.pre_dims[0], self.pre_dims[1]), None, self.cl_sorted_tris, self.cl_tile_premaps, self.cl_offsets, cl.cltypes.uint(self.np_tris.shape[0])).wait()
-        
+        self.queue.finish()
         np_out_l = np.empty((np.sum(np_out2)), dtype=np.int32)
         cl.enqueue_copy(self.queue, np_out_l, self.cl_sorted_tris)
-        print(np_out_l)
+        #print(np_out_l)
         
-        self.tiles4(self.queue, (np.sum(np_out2), 4, 6), None, self.cl_sorted_tris, self.cl_offsets, self.cl_tris, self.cl_out, self.cl_tile_maps).wait()
-        
+        self.tiles4(self.queue, (np.sum(np_out2), 4, 6), (1, 4, 6), self.cl_sorted_tris, self.cl_offsets, self.cl_tris, self.cl_out, self.cl_tile_maps)
+        self.queue.finish()
         #self.make_tiles1(self.queue, (self.mapsize,), None, self.cl_tris, self.cl_out, self.cl_tile_maps)#, self.cl_tile_layers)
         #self.prg.old_make_tiles1(self.queue, (self.mapsize, self.y, self.x), None, self.cl_tris, self.cl_out, self.cl_tile_maps)
         self.count_tiles(self.queue, (self.y,self.x), None, self.cl_tile_maps, self.cl_tile_layer, cl.cltypes.uint(self.np_tris.shape[0])).wait()
         
         np_out = np.empty((self.y, self.x), dtype=np.int32)
         cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
-        print(np_out)
+        #print(np_out)
         self.cl_tile_layers = cl.Buffer(self.ctx, mf.READ_WRITE, max(4*self.y*self.x*np_out.max(), 4*self.y*self.x))
         
         self.make_tiles2(self.queue, (self.y,self.x), None, self.cl_tile_maps, self.cl_tile_layers, self.cl_tile_layer, cl.cltypes.uint(self.np_tris.shape[0]))

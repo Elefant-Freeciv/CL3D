@@ -77,8 +77,8 @@ class main:
         self.delta = 0.0
         self.clicking = False
         self.start_click = []
-        self.ctx = cl.Context(dev_type=cl.device_type.CPU,
-            properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[1])])
+        self.ctx = cl.Context(dev_type=cl.device_type.GPU,
+            properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[0])])
 #         self.ctx = cl.Context(dev_type=cl.device_type.GPU,
 #             properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[0])])
         self.queue = cl.CommandQueue(self.ctx)
@@ -367,7 +367,7 @@ class main:
             for j in range(self.pre_dims[1]):
                 self.np_offsets[i][j]=r_offset
                 r_offset += np_out2[i][j]
-        print(self.np_offsets)
+        #print(self.np_offsets)
         self.cl_offsets = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_offsets)
         
         
@@ -377,7 +377,7 @@ class main:
         np_out_l = np.empty((np.sum(np_out2)), dtype=np.int32)
         cl.enqueue_copy(self.queue, np_out_l, self.cl_sorted_tris)
         #print(np_out_l)
-        
+        print("sum np out 2: ",np.sum(np_out2))
         self.tiles4(self.queue, (np.sum(np_out2), 4, 6), (1, 4, 6), self.cl_sorted_tris, self.cl_offsets, self.cl_tris, self.cl_out, self.cl_tile_maps)
         self.queue.finish()
         #self.make_tiles1(self.queue, (self.mapsize,), None, self.cl_tris, self.cl_out, self.cl_tile_maps)#, self.cl_tile_layers)
@@ -386,7 +386,7 @@ class main:
         
         np_out = np.empty((self.y, self.x), dtype=np.int32)
         cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
-#         print(max(4*self.y*self.x*np_out2.max(), 4*self.y*self.x))
+#         print("sum np out 2: ",np.sum(np_out2))
 #         print(max(4*self.y*self.x*np_out.max(), 4*self.y*self.x))
         #print(np_out)
         self.cl_tile_layers = cl.Buffer(self.ctx, mf.READ_WRITE, max(4*self.y*self.x*np_out.max(), 4*self.y*self.x))

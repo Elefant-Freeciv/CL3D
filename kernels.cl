@@ -376,7 +376,11 @@ __kernel void make_tiles_stage_4(__global uint *sorted_tris,
     int2 gids12 = (int2)(get_global_id(1),get_global_id(2));
     int tid = sorted_tris[gid];
     int2 pretile;
-    for (int i = 0; i<(11*11); i++)
+    /*if (gid == 0)
+    {
+        pretile = (int2)(0,0);
+    }*/
+    for (int i = 1; i<(11*11); i++)
     {
         if (offsets[i/11][i%11] > gid)
         {
@@ -386,6 +390,7 @@ __kernel void make_tiles_stage_4(__global uint *sorted_tris,
     }
     int tile_val = gid%(pre_dims.x*pre_dims.y);
     int2 tile = (int2)((pretile.x*4)+gids12.x,(pretile.y*6)+gids12.y);
+    printf("{%i|%i|%i|%i|%i|%i}",tile.x, tile.y, pretile.x, pretile.y, gids12.x, gids12.y);
     int offset = offsets[pretile.x][pretile.y];
     uint4 tri = tris[tid];
     bool_map[tid][tile.x][tile.y] = 0;

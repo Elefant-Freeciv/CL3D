@@ -71,13 +71,14 @@ class main:
         self.tilesizex = target_tile_size
         self.tilesizey = target_tile_size
         self.pre_dims = (int(self.y/4),int(self.x/6))
+        print(self.pre_dims)
         self.viewpos = [0.0, 0.0, -10.0]
         self.rotation = [0.0, 0.0, 0.0]
         self.delta = 0.0
         self.clicking = False
         self.start_click = []
         self.ctx = cl.Context(dev_type=cl.device_type.CPU,
-            properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[0])])
+            properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[1])])
 #         self.ctx = cl.Context(dev_type=cl.device_type.GPU,
 #             properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[0])])
         self.queue = cl.CommandQueue(self.ctx)
@@ -366,7 +367,7 @@ class main:
             for j in range(self.pre_dims[1]):
                 self.np_offsets[i][j]=r_offset
                 r_offset += np_out2[i][j]
-        #print(self.np_offsets)
+        print(self.np_offsets)
         self.cl_offsets = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_offsets)
         
         

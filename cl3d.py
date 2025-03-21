@@ -77,8 +77,8 @@ class main:
         self.delta = 0.0
         self.clicking = False
         self.start_click = []
-        self.ctx = cl.Context(dev_type=cl.device_type.GPU,
-            properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[0])])
+        self.ctx = cl.Context(dev_type=cl.device_type.CPU,
+            properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[1])])
 #         self.ctx = cl.Context(dev_type=cl.device_type.GPU,
 #             properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[0])])
         self.queue = cl.CommandQueue(self.ctx)

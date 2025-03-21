@@ -286,14 +286,24 @@ __kernel void make_tiles2(__global bool_layer *bool_map, __global tile_layer *ou
 {
     ushort2 tile = (ushort2)(get_global_id(0), get_global_id(1));
     int j = 0;
-    for (int i = 0; i<tcount; i++)
+    int i = 0;
+    while (j<tri_count[tile.x][tile.y] && i<tcount)
     {
         if (bool_map[i][tile.x][tile.y]==1)
         {
             out[j][tile.x][tile.y]=i;
             j++;
         }
+        i++;
     }
+    /*for (int i = 0; i<tcount; i++)
+    {
+        if (bool_map[i][tile.x][tile.y]==1)
+        {
+            out[j][tile.x][tile.y]=i;
+            j++;
+        }
+    }*/
     tri_count[tile.x][tile.y]=j;//DO NOT REMOVE! CAUSES SEG FAULT
 }
 

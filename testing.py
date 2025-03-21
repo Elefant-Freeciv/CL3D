@@ -7,6 +7,9 @@ h = 350*2
 w = 525*2
 
 #cliloader -h -dv python3 main.py
+#export POCL_LEAVE_KERNEL_COMPILER_TEMP_FILES=1
+#export POCL_EXTRA_BUILD_FLAGS="-g -cl-opt-disable"
+#POCL_DEBUG=all gdb python3 main.py
 
 ##pygame.init()
 ##main_screen = pygame.display.set_mode((w, h))

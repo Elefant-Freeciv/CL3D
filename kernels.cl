@@ -244,7 +244,6 @@ __kernel void old_make_tiles1(
     float4 p3 = points[tri.z];
     int2 tile = (int2)(get_global_id(1), get_global_id(2));
     bool_map[gid][tile.x][tile.y] = 0;
-    //tile_layers[gid][tile.x][tile.y] = 0;
     bool a, b, c, d, e, f; 
     int4 tilerect = (int4)(tile.x*tilesize.x, tile.y*tilesize.y, tile.x*tilesize.x+tilesize.x, tile.y*tilesize.y+tilesize.y);
     a = (p1.x >= tilerect.x && p1.x <= tilerect.z);
@@ -274,7 +273,6 @@ __kernel void count_tiles(__global bool_layer *bool_map, __global tile_layer tri
     ushort2 tile = (ushort2)(get_global_id(0), get_global_id(1));
     tri_count[tile.x][tile.y]=0;
     int j = 0;
-    //bool *boolist = bool_map[*][tile.x][tile.y];
     for (int i = 0; i<(tcount); i++)
     {
         j+=bool_map[i][tile.x][tile.y];
@@ -296,14 +294,6 @@ __kernel void make_tiles2(__global bool_layer *bool_map, __global tile_layer *ou
         }
         i++;
     }
-    /*for (int i = 0; i<tcount; i++)
-    {
-        if (bool_map[i][tile.x][tile.y]==1)
-        {
-            out[j][tile.x][tile.y]=i;
-            j++;
-        }
-    }*/
     tri_count[tile.x][tile.y]=j;//DO NOT REMOVE! CAUSES SEG FAULT
 }
 
@@ -386,11 +376,6 @@ __kernel void make_tiles_stage_4(__global uint *sorted_tris,
     int2 gids12 = (int2)(get_global_id(1),get_global_id(2));
     int tid = sorted_tris[gid];
     int2 pretile;
-    /*if (gid == 0)
-    {
-        pretile = (int2)(0,0);
-    }*/
-    int v;
     for (int i = 1; i<=(11*11); i++)
     {
         if (i == 121)
@@ -401,16 +386,10 @@ __kernel void make_tiles_stage_4(__global uint *sorted_tris,
         if (offsets[i/11][i%11] > gid)
         {
             pretile = (int2)((i-1)/11,(i-1)%11);
-            v = i;
             break;
         }
     }
-    //int tile_val = gid%(pre_dims.x*pre_dims.y);
     int2 tile = (int2)((pretile.x*4)+gids12.x,(pretile.y*6)+gids12.y);
-    /*if (tile.x > 44)
-    {
-        printf("{%i|%i|%i|%i|%i|%i|%i|%i}",tile.x, tile.y, pretile.x, pretile.y, gids12.x, gids12.y, gid, v);
-    }*/
     int offset = offsets[pretile.x][pretile.y];
     uint4 tri = tris[tid];
     bool_map[tid][tile.x][tile.y] = 0;

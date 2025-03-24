@@ -77,10 +77,10 @@ class main:
         self.delta = 0.0
         self.clicking = False
         self.start_click = []
-        self.ctx = cl.Context(dev_type=cl.device_type.CPU,
-            properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[1])])
-#         self.ctx = cl.Context(dev_type=cl.device_type.GPU,
-#             properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[0])])
+#         self.ctx = cl.Context(dev_type=cl.device_type.CPU,
+#             properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[1])])
+        self.ctx = cl.Context(dev_type=cl.device_type.GPU,
+            properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[0])])
         self.queue = cl.CommandQueue(self.ctx)
         self.prg = cl.Program(self.ctx,
         f'''
@@ -98,7 +98,7 @@ class main:
         typedef int preint_layer[{self.pre_dims[0]}][{self.pre_dims[1]}];
         typedef uchar4 scr_img[{self.h}][{self.w}];
         typedef uchar4 tex_img[256][1024][1024];
-        '''+open("kernels.cl").read()).build()
+        '''+open("kernels.cl").read()).build(options=["-cl-fast-relaxed-math","-cl-nv-verbose"])
         
         mf = cl.mem_flags
 
@@ -254,14 +254,16 @@ class main:
         for tri in triangles:
             tris.append((tri[0]+tcount, tri[1]+tcount, tri[2]+tcount, 1))
 
+#         print(tris)
         self.np_tris = np.array(tris, dtype=cl.cltypes.uint)
+#         print(self.np_tris.shape)
 
         self.cl_tris = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_tris)
         
         for coord in tex_coords:
             self.texc.append(coord)
         self.np_tex_coords = np.array(self.texc, dtype=np.float32)
-        print(self.np_tex_coords.nbytes)
+#         print(self.np_tex_coords.nbytes)
         self.tex_coords = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_tex_coords)
         
         points = []
@@ -271,7 +273,7 @@ class main:
         for v in vertices:
             points.append((v[0], v[1], v[2], 1.0))
         self.np_points = np.array(points, dtype=np.float32)
-        
+#         print(self.np_points.shape)
         c = [(255, 100, 100, 255),
                    (255, 100, 100, 255),
                    (255, 255, 100, 255),
@@ -360,6 +362,7 @@ class main:
         self.tiles2(self.queue, (self.pre_dims[0], self.pre_dims[1]), None, self.cl_tile_premaps, self.cl_tile_prelayer, cl.cltypes.uint(self.np_tris.shape[0])).wait()
         np_out2 = np.empty((self.pre_dims[0], self.pre_dims[1]), dtype=np.int32)
         cl.enqueue_copy(self.queue, np_out2, self.cl_tile_prelayer)
+#         print(np.sum(np_out2))
         self.cl_sorted_tris = cl.Buffer(self.ctx, mf.READ_WRITE, (4*np.sum(np_out2)))
         self.np_offsets = np.empty((self.pre_dims[0], self.pre_dims[1]), dtype=np.int32)
         r_offset=0
@@ -367,7 +370,7 @@ class main:
             for j in range(self.pre_dims[1]):
                 self.np_offsets[i][j]=r_offset
                 r_offset += np_out2[i][j]
-        #print(self.np_offsets)
+#         print(self.np_offsets)
         self.cl_offsets = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_offsets)
         
         
@@ -377,9 +380,32 @@ class main:
         np_out_l = np.empty((np.sum(np_out2)), dtype=np.int32)
         cl.enqueue_copy(self.queue, np_out_l, self.cl_sorted_tris)
         #print(np_out_l)
-        print("sum np out 2: ",np.sum(np_out2))
-        self.tiles4(self.queue, (np.sum(np_out2), 4, 6), (1, 4, 6), self.cl_sorted_tris, self.cl_offsets, self.cl_tris, self.cl_out, self.cl_tile_maps)
-        self.queue.finish()
+#         print("sum np out 2: ",np.sum(np_out2))
+#         print(self.cl_sorted_tris)
+#         print(self.cl_offsets)
+#         print(self.cl_tris)
+#         print(self.cl_out)
+#         print(self.cl_tile_maps)
+#         print(self.cl_sorted_tris.size)
+#         print(self.cl_offsets.size)
+#         print(self.cl_tris.size)
+#         print(self.cl_out.size)
+#         print(self.cl_tile_maps.size)
+#         print((np.sum(np_out2), 4, 6))
+#         self.tiles4(self.queue, (np.sum(np_out2), 4, 6), None, self.cl_sorted_tris, self.cl_offsets, self.cl_tris, self.cl_out, self.cl_tile_maps)
+#         self.queue.finish()
+#         print("sum np out 2: ", np.sum(np_out2))
+#         print("Buffer sizes and types:")
+#         print("cl_sorted_tris:", self.cl_sorted_tris.size, type(self.cl_sorted_tris))
+#         print("cl_offsets:", self.cl_offsets.size, type(self.cl_offsets))
+#         print("cl_tris:", self.cl_tris.size, type(self.cl_tris))
+#         print("cl_out:", self.cl_out.size, type(self.cl_out))
+#         print("cl_tile_maps:", self.cl_tile_maps.size, type(self.cl_tile_maps))
+#         print("Kernel arguments:")
+#         print((size_val, 4, 6))
+        null_buffer = cl.Buffer(self.ctx, mf.READ_WRITE, (1024))
+        # Ensure the kernel signature matches the arguments
+        self.tiles4(self.queue, (np.sum(np_out2), 4, 6), (1, 4, 6), self.cl_sorted_tris, self.cl_offsets, self.cl_tris, self.cl_out, self.cl_tile_maps)#self.cl_sorted_tris, self.cl_offsets, self.cl_tris, self.cl_out, self.cl_tile_maps)
         #self.make_tiles1(self.queue, (self.mapsize,), None, self.cl_tris, self.cl_out, self.cl_tile_maps)#, self.cl_tile_layers)
         #self.prg.old_make_tiles1(self.queue, (self.mapsize, self.y, self.x), None, self.cl_tris, self.cl_out, self.cl_tile_maps)
         self.count_tiles(self.queue, (self.y,self.x), None, self.cl_tile_maps, self.cl_tile_layer, cl.cltypes.uint(self.np_tris.shape[0])).wait()

@@ -378,7 +378,7 @@ __kernel void make_tiles_stage_3(__global uint *sorted_tris,
 
 __kernel void make_tiles_stage_4(__global uint *sorted_tris,
                                  __global preint_layer offsets,
-                                 __constant uint4 *tris,
+                                 __global uint4 *tris,
                                  __global const float4 *points,
                                  __global bool_layer *bool_map)
 {
@@ -405,7 +405,7 @@ __kernel void make_tiles_stage_4(__global uint *sorted_tris,
             break;
         }
     }
-    int tile_val = gid%(pre_dims.x*pre_dims.y);
+    //int tile_val = gid%(pre_dims.x*pre_dims.y);
     int2 tile = (int2)((pretile.x*4)+gids12.x,(pretile.y*6)+gids12.y);
     /*if (tile.x > 44)
     {

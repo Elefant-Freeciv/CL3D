@@ -268,7 +268,7 @@ __kernel void old_make_tiles1(
 }
 
 
-/*__kernel void count_tiles(__global bool_layer *bool_map, __global tile_layer tri_count, uint tcount)
+__kernel void count_tiles_old(__global bool_layer *bool_map, __global tile_layer tri_count, uint tcount)
 {
     ushort2 tile = (ushort2)(get_global_id(0), get_global_id(1));
     tri_count[tile.x][tile.y]=0;
@@ -278,33 +278,38 @@ __kernel void old_make_tiles1(
         j+=bool_map[i][tile.x][tile.y];
     }
     tri_count[tile.x][tile.y]=j;
-}*/
+}
 
 __kernel void count_tiles(__global bool_layer *bool_map, __global tile_layer *tri_count, uint tcount)
 {
     ushort2 tile = (ushort2)(get_global_id(0), get_global_id(1));
-    int index = get_global_id(2);
+    uint index = get_global_id(2);
     tri_count[index][tile.x][tile.y]=0;
     int j = 0;
-    for (int i = index*256; i<max(convert_uint((index+1)*256), tcount); i++)
+    uint i_max = min((index+1)*256, tcount);
+    for (int i = index*256; i<i_max; i++)
     {
         j+=bool_map[i][tile.x][tile.y];
     }
+    //printf("{%i|%i|%i}", j, index, i_max);
     tri_count[index][tile.x][tile.y]=j;
 }
 
 __kernel void make_tiles2(__global bool_layer *bool_map, __global tile_layer *out, __global tile_layer *tri_count, uint tcount)
 {
     ushort2 tile = (ushort2)(get_global_id(0), get_global_id(1));
-    int index = get_global_id(2);
+    uint index = get_global_id(2);
+    //printf("{%i}", index);
     int j = 0;
-    for (int q = 0; q<index; q++)
+    for (int q = 0; q < index; q++)
     {
-        j += tri_count[j][tile.x][tile.y];
+        j += tri_count[q][tile.x][tile.y];
     }
     int i = index*256;
     int end = tri_count[index][tile.x][tile.y]+j;
-    while (j<end && i<max((index+1)*256, tcount))
+    uint i_max = min((index+1)*256, tcount);
+    printf("{%i|%i|%i}", j, end, index);
+    while (j<end && i<i_max)
     {
         if (bool_map[i][tile.x][tile.y]==1)
         {

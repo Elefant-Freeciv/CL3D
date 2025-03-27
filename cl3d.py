@@ -77,10 +77,10 @@ class main:
         self.delta = 0.0
         self.clicking = False
         self.start_click = []
-#         self.ctx = cl.Context(dev_type=cl.device_type.CPU,
-#             properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[1])])
         self.ctx = cl.Context(dev_type=cl.device_type.CPU,
             properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[1])])
+#         self.ctx = cl.Context(dev_type=cl.device_type.GPU,
+#             properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[0])])
         self.queue = cl.CommandQueue(self.ctx)
         self.prg = cl.Program(self.ctx,
         f'''
@@ -372,7 +372,6 @@ class main:
         np_out_l = np.empty((np.sum(np_out2)), dtype=np.int32)
         cl.enqueue_copy(self.queue, np_out_l, self.cl_sorted_tris)
         null_buffer = cl.Buffer(self.ctx, mf.READ_WRITE, (1024))
-        # Ensure the kernel signature matches the arguments
         self.tiles4(self.queue, (np.sum(np_out2), 4, 6), (1, 4, 6), self.cl_sorted_tris, self.cl_offsets, self.cl_tris, self.cl_out, self.cl_tile_maps)#self.cl_sorted_tris, self.cl_offsets, self.cl_tris, self.cl_out, self.cl_tile_maps)
         #self.make_tiles1(self.queue, (self.mapsize,), None, self.cl_tris, self.cl_out, self.cl_tile_maps)#, self.cl_tile_layers)
         #self.prg.old_make_tiles1(self.queue, (self.mapsize, self.y, self.x), None, self.cl_tris, self.cl_out, self.cl_tile_maps)

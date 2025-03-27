@@ -304,11 +304,13 @@ __kernel void make_tiles2(__global bool_layer *bool_map, __global tile_layer *ou
     for (int q = 0; q < index; q++)
     {
         j += tri_count[q][tile.x][tile.y];
+        //printf("{j:%i}", j);
     }
     int i = index*256;
-    int end = tri_count[index][tile.x][tile.y]+j;
+    int end = tri_count[index][tile.x][tile.y];
     uint i_max = min((index+1)*256, tcount);
     printf("{%i|%i|%i}", j, end, index);
+    j = 0;
     while (j<end && i<i_max)
     {
         if (bool_map[i][tile.x][tile.y]==1)

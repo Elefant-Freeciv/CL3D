@@ -268,9 +268,11 @@ __kernel void old_make_tiles1(
 }
 
 
-__kernel void count_tiles(__global bool_layer *bool_map, __global tile_layer tri_count, uint tcount)
+/*
+__kernel void count_tiles(__global bool_layer *bool_map, __global tile_layer *tri_count, uint tcount)
 {
     ushort2 tile = (ushort2)(get_global_id(0), get_global_id(1));
+    int slice = get_global_id(2);
     tri_count[tile.x][tile.y]=0;
     int j = 0;
     for (int i = 0; i<(tcount); i++)
@@ -295,6 +297,43 @@ __kernel void make_tiles2(__global bool_layer *bool_map, __global tile_layer *ou
         i++;
     }
     tri_count[tile.x][tile.y]=j;//DO NOT REMOVE! CAUSES SEG FAULT
+}
+*/
+
+
+__kernel void count_tiles(__global bool_layer *bool_map, __global tile_layer *tri_count, uint tcount)
+{
+    ushort2 tile = (ushort2)(get_global_id(0), get_global_id(1));
+    uint slice = get_global_id(2);
+    tri_count[slice][tile.x][tile.y]=0;
+    int j = 0;
+    for (int i = slice*256; i<min((slice+1)*256, tcount); i++)
+    {
+        j+=bool_map[i][tile.x][tile.y];
+    }
+    tri_count[slice][tile.x][tile.y]=j;
+}
+
+__kernel void make_tiles2(__global bool_layer *bool_map, __global tile_layer *out, __global tile_layer *tri_count, uint tcount)
+{
+    ushort2 tile = (ushort2)(get_global_id(0), get_global_id(1));
+    uint slice = get_global_id(2);
+    int j = 0;
+    for(int q = 0; q<slice; q++)
+    {
+        j+=tri_count[q][tile.x][tile.y];
+    }
+    int i = slice*256;
+    while (j<tri_count[slice][tile.x][tile.y]+j && i<min((slice+1)*256, tcount))
+    {
+        if (bool_map[i][tile.x][tile.y]==1)
+        {
+            out[j][tile.x][tile.y]=i;
+            j++;
+        }
+        i++;
+    }
+    tri_count[slice][tile.x][tile.y]=j;//DO NOT REMOVE! CAUSES SEG FAULT
 }
 
 __kernel void make_tiles_stage_1(__global const uint4 *tris,

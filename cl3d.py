@@ -77,10 +77,10 @@ class main:
         self.delta = 0.0
         self.clicking = False
         self.start_click = []
-#         self.ctx = cl.Context(dev_type=cl.device_type.CPU,
-#             properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[1])])
-        self.ctx = cl.Context(dev_type=cl.device_type.GPU,
-            properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[0])])
+        self.ctx = cl.Context(dev_type=cl.device_type.CPU,
+            properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[1])])
+#         self.ctx = cl.Context(dev_type=cl.device_type.GPU,
+#             properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[0])])
         self.queue = cl.CommandQueue(self.ctx)
         self.prg = cl.Program(self.ctx,
         f'''
@@ -98,7 +98,7 @@ class main:
         typedef int preint_layer[{self.pre_dims[0]}][{self.pre_dims[1]}];
         typedef uchar4 scr_img[{self.h}][{self.w}];
         typedef uchar4 tex_img[256][1024][1024];
-        '''+open("kernels.cl").read()).build(options=["-cl-fast-relaxed-math","-cl-nv-verbose"])
+        '''+open("kernels.cl").read()).build()#options=["-cl-fast-relaxed-math","-cl-nv-verbose"])
         
         mf = cl.mem_flags
 
@@ -343,12 +343,14 @@ class main:
                            self.cl_points,
                            self.cl_view,
                            self.cl_screen,
-                           self.cl_out)
+                           self.cl_out).wait()
 
+        slice_count = int(self.np_tris.shape[0]/256)+1
+        
         self.mapsize = int(self.np_tris.shape[0])
         self.cl_tile_maps = cl.Buffer(self.ctx, mf.READ_WRITE, (self.y*self.x*self.mapsize))
         self.cl_tile_premaps = cl.Buffer(self.ctx, mf.READ_WRITE, (int(self.y*self.x*self.mapsize/24)))
-        self.cl_tile_layer = cl.Buffer(self.ctx, mf.READ_WRITE, (4*self.y*self.x))
+        self.cl_tile_count = cl.Buffer(self.ctx, mf.READ_WRITE, (4*self.y*self.x*slice_count))
         self.cl_tile_prelayer = cl.Buffer(self.ctx, mf.READ_WRITE, int(4*self.y*self.x/24))
         
         self.tiles1(self.queue, (self.mapsize, self.pre_dims[0], self.pre_dims[1]), None, self.cl_tris, self.cl_out, self.cl_tile_premaps).wait()
@@ -370,16 +372,19 @@ class main:
         cl.enqueue_copy(self.queue, np_out_l, self.cl_sorted_tris)
         null_buffer = cl.Buffer(self.ctx, mf.READ_WRITE, (1024))
         # Ensure the kernel signature matches the arguments
-        self.tiles4(self.queue, (np.sum(np_out2), 4, 6), (1, 4, 6), self.cl_sorted_tris, self.cl_offsets, self.cl_tris, self.cl_out, self.cl_tile_maps)#self.cl_sorted_tris, self.cl_offsets, self.cl_tris, self.cl_out, self.cl_tile_maps)
+        self.tiles4(self.queue, (np.sum(np_out2), 4, 6), (1, 4, 6), self.cl_sorted_tris, self.cl_offsets, self.cl_tris, self.cl_out, self.cl_tile_maps).wait()#self.cl_sorted_tris, self.cl_offsets, self.cl_tris, self.cl_out, self.cl_tile_maps)
         #self.make_tiles1(self.queue, (self.mapsize,), None, self.cl_tris, self.cl_out, self.cl_tile_maps)#, self.cl_tile_layers)
         #self.prg.old_make_tiles1(self.queue, (self.mapsize, self.y, self.x), None, self.cl_tris, self.cl_out, self.cl_tile_maps)
-        self.count_tiles(self.queue, (self.y,self.x), None, self.cl_tile_maps, self.cl_tile_layer, cl.cltypes.uint(self.np_tris.shape[0])).wait()
+        self.count_tiles(self.queue, (self.y,self.x, slice_count), None, self.cl_tile_maps, self.cl_tile_count, cl.cltypes.uint(self.np_tris.shape[0])).wait()
         
-        np_out = np.empty((self.y, self.x), dtype=np.int32)
-        cl.enqueue_copy(self.queue, np_out, self.cl_tile_layer)
+        np_out = np.empty((slice_count, self.y, self.x), dtype=np.int32)
+        cl.enqueue_copy(self.queue, np_out, self.cl_tile_count)
         self.cl_tile_layers = cl.Buffer(self.ctx, mf.READ_WRITE, max(4*self.y*self.x*np_out.max(), 4*self.y*self.x))
+        np_tile_layer = np.sum(np_out, axis=0)
+        print(np_out)
+        self.cl_tile_layer = cl.Buffer(self.ctx, mf.READ_ONLY|mf.COPY_HOST_PTR, hostbuf=np_tile_layer)
         
-        self.make_tiles2(self.queue, (self.y,self.x), None, self.cl_tile_maps, self.cl_tile_layers, self.cl_tile_layer, cl.cltypes.uint(self.np_tris.shape[0]))
+        self.make_tiles2(self.queue, (self.y,self.x, slice_count), None, self.cl_tile_maps, self.cl_tile_layers, self.cl_tile_count, cl.cltypes.uint(self.np_tris.shape[0])).wait()
 
         self.dest = np.empty((self.h,self.w,4), dtype=cl.cltypes.uchar)
         self.dest_buf = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.dest)

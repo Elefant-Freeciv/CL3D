@@ -5,6 +5,9 @@ import multiprocessing
 import numpy as np
 from PIL import Image
 
+np.set_printoptions(linewidth=100000, threshold = np.inf)
+
+
 def sort(points):
     tris = [[]]
     for point in points:
@@ -345,7 +348,7 @@ class main:
                            self.cl_screen,
                            self.cl_out).wait()
 
-        slice_count = int(self.np_tris.shape[0]/256)+1
+        slice_count = math.ceil(self.np_tris.shape[0]/256)
         
         self.mapsize = int(self.np_tris.shape[0])
         self.cl_tile_maps = cl.Buffer(self.ctx, mf.READ_WRITE, (self.y*self.x*self.mapsize))
@@ -379,10 +382,14 @@ class main:
         
         np_out = np.empty((slice_count, self.y, self.x), dtype=np.int32)
         cl.enqueue_copy(self.queue, np_out, self.cl_tile_count)
-        self.cl_tile_layers = cl.Buffer(self.ctx, mf.READ_WRITE, max(4*self.y*self.x*np_out.max(), 4*self.y*self.x))
+        self.cl_tile_layers = cl.Buffer(self.ctx, mf.READ_WRITE, max(4*self.y*self.x*np.sum(np_out, axis=0).max(), 4*self.y*self.x))
+        #print("np_out: ", np_out)
+        print("np.sum(np_out, axis=0).max(): ", np.sum(np_out, axis=0).max())
         np_tile_layer = np.sum(np_out, axis=0)
-        print(np_out)
+        #print(np_tile_layer)
+        print("slice_count: ", slice_count)
         self.cl_tile_layer = cl.Buffer(self.ctx, mf.READ_ONLY|mf.COPY_HOST_PTR, hostbuf=np_tile_layer)
+        #self.cl_nb = cl.Buffer(self.ctx, mf.READ_ONLY|mf.COPY_HOST_PTR, hostbuf=np_out)
         
         self.make_tiles2(self.queue, (self.y,self.x, slice_count), None, self.cl_tile_maps, self.cl_tile_layers, self.cl_tile_count, cl.cltypes.uint(self.np_tris.shape[0])).wait()
 
@@ -406,6 +413,7 @@ class main:
         self.cl_view.release()
         self.cl_points.release()
         self.dest_buf.release()
+        self.cl_tile_count.release()
 #         for i in range(self.y):
 #             for j in range(self.x):
 #                 render_surface.blit(font.render(str(np_out[i][j]), 1, (0, 0, 0)), (j*self.tilesizex, i*self.tilesizey))

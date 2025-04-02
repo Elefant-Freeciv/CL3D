@@ -422,7 +422,7 @@ class main:
         np_out_l = np.empty((np.sum(np_out2)), dtype=np.int32)
         cl.enqueue_copy(self.queue, np_out_l, self.cl_sorted_tris)
         null_buffer = cl.Buffer(self.ctx, mf.READ_WRITE, (1024))
-        # Ensure the kernel signature matches the arguments
+
         self.tiles4(self.queue,
                     (np.sum(np_out2), 4, 6),
                     (1, 4, 6),
@@ -430,7 +430,7 @@ class main:
                     self.cl_offsets,
                     self.cl_tris,
                     self.cl_out,
-                    self.cl_tile_maps).wait()#self.cl_sorted_tris, self.cl_offsets, self.cl_tris, self.cl_out, self.cl_tile_maps)
+                    self.cl_tile_maps).wait()
         #self.make_tiles1(self.queue, (self.mapsize,), None, self.cl_tris, self.cl_out, self.cl_tile_maps)#, self.cl_tile_layers)
         #self.prg.old_make_tiles1(self.queue, (self.mapsize, self.y, self.x), None, self.cl_tris, self.cl_out, self.cl_tile_maps)
         self.count_tiles(self.queue,
@@ -445,16 +445,11 @@ class main:
         self.cl_tile_layers = cl.Buffer(self.ctx,
                                         mf.READ_WRITE,
                                         max(4*self.y*self.x*np.sum(np_out, axis=0).max(), 4*self.y*self.x))
-        #print("np_out: ", np_out)
-        print("np.sum(np_out, axis=0).max(): ", np.sum(np_out, axis=0).max())
+
         np_tile_layer = np.sum(np_out, axis=0, dtype=np.int32)
-        print(np_tile_layer.dtype)
-        #print(np_tile_layer)
-        print("slice_count: ", slice_count)
         self.cl_tile_layer = cl.Buffer(self.ctx,
                                        mf.READ_ONLY|mf.COPY_HOST_PTR,
                                        hostbuf=np_tile_layer)
-        #self.cl_nb = cl.Buffer(self.ctx, mf.READ_ONLY|mf.COPY_HOST_PTR, hostbuf=np_out)
         
         self.make_tiles2(self.queue,
                          (self.y,self.x, slice_count),
@@ -463,39 +458,6 @@ class main:
                          self.cl_tile_layers,
                          self.cl_tile_count,
                          cl.cltypes.uint(self.np_tris.shape[0])).wait()
-
-        
-        
-#         self.cl_tile_layer_old = cl.Buffer(self.ctx, mf.READ_WRITE, (4*self.y*self.x))
-#         self.prg.count_tiles_old(self.queue,
-#                                  (self.y,self.x),
-#                                  None,
-#                                  self.cl_tile_maps,
-#                                  self.cl_tile_layer_old,
-#                                  cl.cltypes.uint(self.np_tris.shape[0]))
-#         
-#         np_out_old = np.empty((self.y, self.x), dtype=np.int32)
-#         cl.enqueue_copy(self.queue, np_out_old, self.cl_tile_layer)
-#         self.cl_tile_layers_old = cl.Buffer(self.ctx, mf.READ_WRITE, max(4*self.y*self.x*np_out_old.max(), 4*self.y*self.x))
-#         
-#         self.prg.make_tiles2_old(self.queue,
-#                                  (self.y,self.x),
-#                                  None,
-#                                  self.cl_tile_maps,
-#                                  self.cl_tile_layers_old,
-#                                  self.cl_tile_layer_old,
-#                                  cl.cltypes.uint(self.np_tris.shape[0]))
-#         np_tile_layers = np.empty((np.sum(np_out, axis=0).max(), self.y, self.x), dtype=np.int32)
-#         cl.enqueue_copy(self.queue, np_tile_layers, self.cl_tile_layers)
-#         np_tile_layers_old = np.empty((np.sum(np_out, axis=0).max(), self.y, self.x), dtype=np.int32)
-#         cl.enqueue_copy(self.queue, np_tile_layers_old, self.cl_tile_layers_old)
-#         print((np_tile_layers-np_tile_layers_old).min())
-#         print((np_tile_layers-np_tile_layers_old).max())
-#         assert np.allclose(np_tile_layers, np_tile_layers_old)
-#         np_tile_layer_old = np.empty((np.sum(np_out, axis=0).max(), self.y, self.x), dtype=np.int32)
-#         cl.enqueue_copy(self.queue, np_tile_layer_old, self.cl_tile_layer_old)
-#         assert np.allclose(np_tile_layer, np_tile_layer_old)
-
 
         self.dest = np.empty((self.h,self.w,4), dtype=cl.cltypes.uchar)
         self.dest_buf = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.dest)
@@ -528,10 +490,10 @@ class main:
         self.cl_points.release()
         self.dest_buf.release()
         self.cl_tile_count.release()
-        for i in range(self.y):
-            for j in range(self.x):
-                if np_tile_layer[i][j] < 100:
-                    render_surface.blit(font.render(str(np_tile_layer[i][j]), 1, (0, 0, 0)), (j*self.tilesizex, i*self.tilesizey))
+#         for i in range(self.y):
+#             for j in range(self.x):
+#                 if np_tile_layer[i][j] < 100:
+#                     render_surface.blit(font.render(str(np_tile_layer[i][j]), 1, (0, 0, 0)), (j*self.tilesizex, i*self.tilesizey))
 #         for i in range(self.pre_dims[0]):
 #             for j in range(self.pre_dims[1]):
 #                 render_surface.blit(font.render(str(np_out2[i][j]), 1, (0, 0, 0)), (j*self.tilesizex*6, i*self.tilesizey*4))

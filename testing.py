@@ -201,7 +201,7 @@ clock = pygame.time.Clock()
 fast_enough = True
 false = True
 m.make()
-for i in range(100):
+for i in range(10):
     print(i)
     fps_val = int(clock.get_fps())
     dt = clock.tick(75)/1000.0

@@ -268,8 +268,8 @@ __kernel void old_make_tiles1(
 }
 
 
-/*
-__kernel void count_tiles(__global bool_layer *bool_map, __global tile_layer *tri_count, uint tcount)
+
+__kernel void count_tiles_old(__global bool_layer *bool_map, __global tile_layer tri_count, uint tcount)
 {
     ushort2 tile = (ushort2)(get_global_id(0), get_global_id(1));
     int slice = get_global_id(2);
@@ -282,7 +282,7 @@ __kernel void count_tiles(__global bool_layer *bool_map, __global tile_layer *tr
     tri_count[tile.x][tile.y]=j;
 }
 
-__kernel void make_tiles2(__global bool_layer *bool_map, __global tile_layer *out, __global tile_layer tri_count, uint tcount)
+__kernel void make_tiles2_old(__global bool_layer *bool_map, __global tile_layer *out, __global tile_layer tri_count, uint tcount)
 {
     ushort2 tile = (ushort2)(get_global_id(0), get_global_id(1));
     int j = 0;
@@ -298,7 +298,7 @@ __kernel void make_tiles2(__global bool_layer *bool_map, __global tile_layer *ou
     }
     tri_count[tile.x][tile.y]=j;//DO NOT REMOVE! CAUSES SEG FAULT
 }
-*/
+
 
 
 __kernel void count_tiles(__global bool_layer *bool_map, __global tile_layer *tri_count, uint tcount)

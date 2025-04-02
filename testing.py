@@ -5,7 +5,7 @@ import cProfile, pstats
 
 h = 350*2
 w = 525*2
-debug = True
+debug = False
 
 #cliloader -h -dv python3 main.py
 #export POCL_LEAVE_KERNEL_COMPILER_TEMP_FILES=1

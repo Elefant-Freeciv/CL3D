@@ -5,6 +5,7 @@ import cProfile, pstats
 
 h = 350*2
 w = 525*2
+debug = True
 
 #cliloader -h -dv python3 main.py
 #export POCL_LEAVE_KERNEL_COMPILER_TEMP_FILES=1
@@ -196,7 +197,7 @@ pygame.init()
 main_screen = pygame.display.set_mode((w, h))
 render_surface = pygame.Surface((w, h))
 font = pygame.font.SysFont("Arial", 15)
-m = main(h, w)
+m = main(h, w, debug)
 clock = pygame.time.Clock()
 fast_enough = True
 false = True

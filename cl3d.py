@@ -66,7 +66,8 @@ class Math3D:
         return matA
 
 class main:
-    def __init__(self, h, w, target_tile_size=16):
+    def __init__(self, h, w, debug=False, target_tile_size=16):
+        self.debug = debug
         self.h = math.ceil(h/target_tile_size)*target_tile_size
         self.w = math.ceil(w/target_tile_size)*target_tile_size
         self.y = int(self.h / target_tile_size)
@@ -312,24 +313,45 @@ class main:
         return np.asarray( rgb, dtype='uint8' )
         
     def render(self, render_surface, font):
+        debug = self.debug
+        if debug:
+            step = 0
+            print("step: ", step)#0
+            step += 1
         np_model = np.eye(4, dtype=np.float32)
         Math3D.translate(np_model, (1.0, 1.0, 1.0))
         np_model = Math3D.rotate(np_model, 10.0 * self.rotation[0], (1.0, 0.0, 0.0))
         np_model = Math3D.rotate(np_model, 10.0 * self.rotation[1], (0.0, 1.0, 0.0))
         
+        if debug:
+            print("step: ", step)#1
+            step += 1
+        
         view = np.eye(4, dtype=np.float32)
         Math3D.translate(view, (-self.viewpos[0], -self.viewpos[1], self.viewpos[2]))
+        
+        if debug:
+            print("step: ", step)#2
+            step += 1
         
         right = 12.0
         top = 8.0
         far = 100.0
         near = 0.1
         
+        if debug:
+            print("step: ", step)#3
+            step += 1
+        
         orth_proj = np.eye(4, dtype=np.float32)
         orth_proj[0][0] = 1 / right
         orth_proj[1][1] = 1 / top
         orth_proj[2][2] = -2 / (far - near)
         orth_proj[2][3] = -((far + near) / (far - near))
+        
+        if debug:
+            print("step: ", step)#4
+            step += 1
         
         np_view = np.dot(orth_proj, view)
         np_view = np.dot(np_view, np_model)
@@ -378,7 +400,11 @@ class main:
         
         self.cl_tile_prelayer = cl.Buffer(self.ctx,
                                           mf.READ_WRITE,
-                                          int(4*self.y*self.x/24))
+                                          int(4*self.y*self.x/24)*slice_count)
+        
+        if debug:
+            print("step: ", step)#5
+            step += 1
         
         self.tiles1(self.queue,
                     (self.mapsize, self.pre_dims[0], self.pre_dims[1]),
@@ -387,19 +413,36 @@ class main:
                     self.cl_out,
                     self.cl_tile_premaps).wait()
         
+        if debug:
+            print("step: ", step)#6
+            step += 1
+        
         self.tiles2(self.queue,
-                    (self.pre_dims[0], self.pre_dims[1]),
+                    (self.pre_dims[0], self.pre_dims[1], slice_count),
                     None,
                     self.cl_tile_premaps,
                     self.cl_tile_prelayer,
                     cl.cltypes.uint(self.np_tris.shape[0])).wait()
         
-        np_out2 = np.empty((self.pre_dims[0], self.pre_dims[1]), dtype=np.int32)
-        cl.enqueue_copy(self.queue, np_out2, self.cl_tile_prelayer)
+        if debug:
+            print("step: ", step)#7
+            step += 1
+        
+        np_tile_prelayer = np.empty((slice_count, self.pre_dims[0], self.pre_dims[1]), dtype=np.int32)
+        cl.enqueue_copy(self.queue, np_tile_prelayer, self.cl_tile_prelayer)
+        np_out2 = np.sum(np_tile_prelayer, axis=0)
+        
+        if debug:
+            print("step: ", step)#8
+            step += 1
         
         self.cl_sorted_tris = cl.Buffer(self.ctx,
                                         mf.READ_WRITE,
                                         (4*np.sum(np_out2)))
+        
+        if debug:
+            print("step: ", step)#9
+            step += 1
         
         self.np_offsets = np.empty((self.pre_dims[0], self.pre_dims[1]), dtype=np.int32)
         r_offset=0
@@ -411,17 +454,30 @@ class main:
                                     mf.READ_ONLY | mf.COPY_HOST_PTR,
                                     hostbuf=self.np_offsets)
         
+        if debug:
+            print("step: ", step)#10
+            step += 1
+        
         self.tiles3(self.queue,
-                    (self.pre_dims[0], self.pre_dims[1]),
+                    (self.pre_dims[0], self.pre_dims[1], slice_count),
                     None,
                     self.cl_sorted_tris,
                     self.cl_tile_premaps,
                     self.cl_offsets,
+                    self.cl_tile_prelayer,
                     cl.cltypes.uint(self.np_tris.shape[0])).wait()
+        
+        if debug:
+            print("step: ", step)#11
+            step += 1
         
         np_out_l = np.empty((np.sum(np_out2)), dtype=np.int32)
         cl.enqueue_copy(self.queue, np_out_l, self.cl_sorted_tris)
         null_buffer = cl.Buffer(self.ctx, mf.READ_WRITE, (1024))
+        
+        if debug:
+            print("step: ", step)#12
+            step += 1
 
         self.tiles4(self.queue,
                     (np.sum(np_out2), 4, 6),
@@ -431,6 +487,10 @@ class main:
                     self.cl_tris,
                     self.cl_out,
                     self.cl_tile_maps).wait()
+        
+        if debug:
+            print("step: ", step)#13
+            step += 1
         #self.make_tiles1(self.queue, (self.mapsize,), None, self.cl_tris, self.cl_out, self.cl_tile_maps)#, self.cl_tile_layers)
         #self.prg.old_make_tiles1(self.queue, (self.mapsize, self.y, self.x), None, self.cl_tris, self.cl_out, self.cl_tile_maps)
         self.count_tiles(self.queue,
@@ -440,16 +500,28 @@ class main:
                          self.cl_tile_count,
                          cl.cltypes.uint(self.np_tris.shape[0])).wait()
         
+        if debug:
+            print("step: ", step)#14
+            step += 1
+        
         np_out = np.empty((slice_count, self.y, self.x), dtype=np.int32)
         cl.enqueue_copy(self.queue, np_out, self.cl_tile_count)
         self.cl_tile_layers = cl.Buffer(self.ctx,
                                         mf.READ_WRITE,
                                         max(4*self.y*self.x*np.sum(np_out, axis=0).max(), 4*self.y*self.x))
 
+        if debug:
+            print("step: ", step)#15
+            step += 1
+        
         np_tile_layer = np.sum(np_out, axis=0, dtype=np.int32)
         self.cl_tile_layer = cl.Buffer(self.ctx,
                                        mf.READ_ONLY|mf.COPY_HOST_PTR,
                                        hostbuf=np_tile_layer)
+        
+        if debug:
+            print("step: ", step)#16
+            step += 1
         
         self.make_tiles2(self.queue,
                          (self.y,self.x, slice_count),
@@ -458,6 +530,10 @@ class main:
                          self.cl_tile_layers,
                          self.cl_tile_count,
                          cl.cltypes.uint(self.np_tris.shape[0])).wait()
+        
+        if debug:
+            print("step: ", step)#17
+            step += 1
 
         self.dest = np.empty((self.h,self.w,4), dtype=cl.cltypes.uchar)
         self.dest_buf = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.dest)
@@ -472,7 +548,16 @@ class main:
                            self.cl_tile_layer,
                            self.tex,
                            self.dest_buf).wait()
+        
+        if debug:
+            print("step: ", step)#18
+            step += 1
+        
         cl.enqueue_copy(self.queue, self.dest, self.dest_buf)
+        
+        if debug:
+            print("step: ", step)#19
+            step += 1
 
         surf = pygame.surfarray.make_surface(self.dest[:,:,:3])
         surf = pygame.transform.rotate(surf, 90)
@@ -480,6 +565,10 @@ class main:
         render_surface.blit(surf, (0, 0))
         verts = font.render(str(len(self.np_points)), 1, (0, 0, 0))
         render_surface.blit(verts, (0, 30))
+        
+        if debug:
+            print("step: ", step)#20
+            step += 1
         
         self.cl_tile_layers.release()
         self.cl_tile_layer.release()
@@ -489,7 +578,11 @@ class main:
         self.cl_view.release()
         self.cl_points.release()
         self.dest_buf.release()
-        self.cl_tile_count.release()
+        
+        if debug:
+            print("step: ", step)#21
+            step += 1
+#         self.cl_tile_count.release()
 #         for i in range(self.y):
 #             for j in range(self.x):
 #                 if np_tile_layer[i][j] < 100:

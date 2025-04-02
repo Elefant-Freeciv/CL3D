@@ -340,7 +340,7 @@ __kernel void make_tiles_stage_1(__global const uint4 *tris,
     if (a || b || c || d || e || f){bool_map[gid][tile.x][tile.y] = 1;}
 }
 
-__kernel void make_tiles_stage_2(__global pre_layer *bool_map,
+/*__kernel void make_tiles_stage_2(__global pre_layer *bool_map,
 				 __global preint_layer tri_count,
 				 uint tcount)
 {
@@ -372,6 +372,46 @@ __kernel void make_tiles_stage_3(__global uint *sorted_tris,
             sorted_tris[offset+j] = i;
             j++;
         }
+    }
+}*/
+
+__kernel void make_tiles_stage_2(__global pre_layer *bool_map, __global preint_layer *tri_count, uint tcount)
+{
+    uint2 tile = (uint2)(get_global_id(0), get_global_id(1));
+    uint slice = get_global_id(2);
+    tri_count[slice][tile.x][tile.y]=0;
+    int j = 0;
+    for (int i = slice*256; i<min((slice+1)*256, tcount); i++)
+    {
+        j+=bool_map[i][tile.x][tile.y];
+    }
+    tri_count[slice][tile.x][tile.y]=j;
+}
+
+__kernel void make_tiles_stage_3(__global uint *sorted_tris, __global pre_layer *bool_map, __global preint_layer offsets, __global preint_layer *tri_count, uint tcount)
+{
+    uint2 tile = (uint2)(get_global_id(0), get_global_id(1));
+    uint slice = get_global_id(2);
+    //int offset = offsets[tile.x][tile.y];
+    int j = offsets[tile.x][tile.y];
+    int i;
+    uint j_max;
+    uint i_max;
+    for(int q = 0; q < slice; q++)
+    {
+        j += tri_count[q][tile.x][tile.y];
+    }
+    i = slice*256;
+    j_max = tri_count[slice][tile.x][tile.y]+j;
+    i_max = min((slice+1)*256, tcount);
+    while (j<j_max && i<i_max)
+    {
+        if (bool_map[i][tile.x][tile.y]==1)
+        {
+            sorted_tris[j]=i;
+            j++;
+        }
+        i++;
     }
 }
 

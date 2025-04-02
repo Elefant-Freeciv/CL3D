@@ -82,8 +82,8 @@ class main:
         self.start_click = []
         self.ctx = cl.Context(dev_type=cl.device_type.CPU,
             properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[1])])
-#         self.ctx = cl.Context(dev_type=cl.device_type.GPU,
-#             properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[0])])
+        self.ctx = cl.Context(dev_type=cl.device_type.GPU,
+            properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[0])])
         self.queue = cl.CommandQueue(self.ctx)
         self.prg = cl.Program(self.ctx,
         f'''
@@ -414,9 +414,10 @@ class main:
         self.cl_points.release()
         self.dest_buf.release()
         self.cl_tile_count.release()
-#         for i in range(self.y):
-#             for j in range(self.x):
-#                 render_surface.blit(font.render(str(np_out[i][j]), 1, (0, 0, 0)), (j*self.tilesizex, i*self.tilesizey))
+        for i in range(self.y):
+            for j in range(self.x):
+                if np_tile_layer[i][j] < 100:
+                    render_surface.blit(font.render(str(np_tile_layer[i][j]), 1, (0, 0, 0)), (j*self.tilesizex, i*self.tilesizey))
 #         for i in range(self.pre_dims[0]):
 #             for j in range(self.pre_dims[1]):
 #                 render_surface.blit(font.render(str(np_out2[i][j]), 1, (0, 0, 0)), (j*self.tilesizex*6, i*self.tilesizey*4))

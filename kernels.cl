@@ -311,10 +311,10 @@ __kernel void count_tiles(__global bool_layer *bool_map, __global tile_layer *tr
     {
         j+=bool_map[i][tile.x][tile.y];
     }
-    if (j>=256)
+    /*if (j>=256)
     {
 		printf("{%i}", j);
-    }
+    }*/
     tri_count[slice][tile.x][tile.y]=j;
     //printf("{%i}", j);
 }
@@ -332,10 +332,10 @@ __kernel void make_tiles2(__global bool_layer *bool_map, __global tile_layer *ou
     for(int q = 0; q < slice; q++)
     {
         j += tri_count[q][tile.x][tile.y];
-        if (tri_count[q][tile.x][tile.y] > 256)
+        /*if (tri_count[q][tile.x][tile.y] > 256)
         {
             printf("{%i|%i|%i|%i|%i|%i}", q, j, tri_count[q][tile.x][tile.y], tile.x, tile.y, slice);
-        }
+        }*/
     }
     i = slice*256;
     //printf("{%i|%i|%i|%i|%i}", slice, j, i, tile.x, tile.y);

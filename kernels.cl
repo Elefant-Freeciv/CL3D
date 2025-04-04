@@ -70,7 +70,6 @@ float3 barycentric(float2 px, float4 a, float4 b, float4 c)
 float pixel_depth(ushort2 pos, float4 p1, float4 p2, float4 p3)
 {
     float2 px = (float2)(convert_float(pos.x),convert_float(pos.y));
-    //printf("{%f|%f|%f|%f|%f|%f|%f|%f|%f}", p1.x,p1.y,p1.w,p2.x,p2.y,p2.w,p3.x,p3.y,p3.w);
     float3 bary = barycentric(px, p1, p2, p3);
     float z = bary.x * 1/p1.w + bary.y * 1/p2.w + bary.z * 1/p3.w;
     return 1/z;
@@ -267,25 +266,40 @@ __kernel void old_make_tiles1(
     if (a || b || c || d || e || f){bool_map[gid][tile.x][tile.y] = 1;}
 }
 
-
-__kernel void count_tiles(__global bool_layer *bool_map, __global tile_layer tri_count, uint tcount)
+__kernel void count_tiles(__global bool_layer *bool_map, __global tile_layer *tri_count, uint tcount)
 {
-    ushort2 tile = (ushort2)(get_global_id(0), get_global_id(1));
-    tri_count[tile.x][tile.y]=0;
+    uint2 tile = (uint2)(get_global_id(0), get_global_id(1));
+    uint slice = get_global_id(2);
+    //tri_count[slice][tile.x][tile.y]=0;
     int j = 0;
-    for (int i = 0; i<(tcount); i++)
+    int i_max = min((slice+1)*slice_size, tcount);
+    for (int i = slice*slice_size; i<i_max; i++)
     {
-        j+=bool_map[i][tile.x][tile.y];
+        //j+=bool_map[i][tile.x][tile.y];
+        if (bool_map[i][tile.x][tile.y]==1)
+        {
+            j++;
+        }
     }
-    tri_count[tile.x][tile.y]=j;
+    tri_count[slice][tile.x][tile.y]=j;
 }
 
-__kernel void make_tiles2(__global bool_layer *bool_map, __global tile_layer *out, __global tile_layer tri_count, uint tcount)
+__kernel void make_tiles2(__global bool_layer *bool_map, __global tile_layer *out, __global tile_layer *tri_count, uint tcount)
 {
-    ushort2 tile = (ushort2)(get_global_id(0), get_global_id(1));
+    uint2 tile = (uint2)(get_global_id(0), get_global_id(1));
+    uint slice = get_global_id(2);
     int j = 0;
-    int i = 0;
-    while (j<tri_count[tile.x][tile.y] && i<tcount)
+    int i;
+    uint j_max;
+    uint i_max;
+    for(int q = 0; q < slice; q++)
+    {
+        j += tri_count[q][tile.x][tile.y];
+    }
+    i = slice*slice_size;
+    j_max = tri_count[slice][tile.x][tile.y]+j;
+    i_max = min((slice+1)*slice_size, tcount);
+    while (j<j_max && i<i_max)
     {
         if (bool_map[i][tile.x][tile.y]==1)
         {
@@ -294,7 +308,6 @@ __kernel void make_tiles2(__global bool_layer *bool_map, __global tile_layer *ou
         }
         i++;
     }
-    tri_count[tile.x][tile.y]=j;//DO NOT REMOVE! CAUSES SEG FAULT
 }
 
 __kernel void make_tiles_stage_1(__global const uint4 *tris,
@@ -331,38 +344,44 @@ __kernel void make_tiles_stage_1(__global const uint4 *tris,
     if (a || b || c || d || e || f){bool_map[gid][tile.x][tile.y] = 1;}
 }
 
-__kernel void make_tiles_stage_2(__global pre_layer *bool_map,
-				 __global preint_layer tri_count,
-				 uint tcount)
+__kernel void make_tiles_stage_2(__global pre_layer *bool_map, __global preint_layer *tri_count, uint tcount)
 {
-    ushort2 tile = (ushort2)(get_global_id(0), get_global_id(1));
-    tri_count[tile.x][tile.y]=0;
+    uint2 tile = (uint2)(get_global_id(0), get_global_id(1));
+    uint slice = get_global_id(2);
+    //tri_count[slice][tile.x][tile.y]=0;
     int j = 0;
-    for (int i = 0; i<(tcount); i++)
+    int i_max = min((slice+1)*slice_size, tcount);
+    for (int i = slice*slice_size; i<i_max; i++)
     {
-        if (bool_map[i][tile.x][tile.y]==1)
-        {
-            j++;
-        }
+        j+=bool_map[i][tile.x][tile.y];
     }
-    tri_count[tile.x][tile.y]=j;
+    tri_count[slice][tile.x][tile.y]=j;
 }
 
-__kernel void make_tiles_stage_3(__global uint *sorted_tris,
-				 __global pre_layer *bool_map,
-				 __global preint_layer offsets,
-				 uint tcount)
+__kernel void make_tiles_stage_3(__global uint *sorted_tris, __global pre_layer *bool_map, __global preint_layer offsets, __global preint_layer *tri_count, uint tcount)
 {
-    int2 tile = (int2)(get_global_id(0),get_global_id(1));
-    int offset = offsets[tile.x][tile.y];
-    int j = 0;
-    for(int i= 0; i<tcount;i++)
+    uint2 tile = (uint2)(get_global_id(0), get_global_id(1));
+    uint slice = get_global_id(2);
+    //int offset = offsets[tile.x][tile.y];
+    int j = offsets[tile.x][tile.y];
+    int i;
+    uint j_max;
+    uint i_max;
+    for(int q = 0; q < slice; q++)
+    {
+        j += tri_count[q][tile.x][tile.y];
+    }
+    i = slice*slice_size;
+    j_max = tri_count[slice][tile.x][tile.y]+j;
+    i_max = min((slice+1)*slice_size, tcount);
+    while (j<j_max && i<i_max)
     {
         if (bool_map[i][tile.x][tile.y]==1)
         {
-            sorted_tris[offset+j] = i;
+            sorted_tris[j]=i;
             j++;
         }
+        i++;
     }
 }
 
@@ -392,7 +411,7 @@ __kernel void make_tiles_stage_4(__global uint *sorted_tris,
     int2 tile = (int2)((pretile.x*4)+gids12.x,(pretile.y*6)+gids12.y);
     int offset = offsets[pretile.x][pretile.y];
     uint4 tri = tris[tid];
-    bool_map[tid][tile.x][tile.y] = 0;
+    uchar test = 0;
     float4 p1 = points[tri.x];
     float4 p2 = points[tri.y];
     float4 p3 = points[tri.z];
@@ -404,19 +423,20 @@ __kernel void make_tiles_stage_4(__global uint *sorted_tris,
     d = (p2.y >= tilerect.y && p2.y <= tilerect.w);
     e = (p3.x >= tilerect.x && p3.x <= tilerect.z);
     f = (p3.y >= tilerect.y && p3.y <= tilerect.w);
-    if ((a && b) || (c && d) || (e && f)){bool_map[tid][tile.x][tile.y] = 1;}
+    if ((a && b) || (c && d) || (e && f)){test = 1;}
     a = point_in_triangle((ushort2)(tilerect.x, tilerect.y), p1, p2, p3);
     b = point_in_triangle((ushort2)(tilerect.x, tilerect.w), p1, p2, p3);
     c = point_in_triangle((ushort2)(tilerect.z, tilerect.y), p1, p2, p3);
     d = point_in_triangle((ushort2)(tilerect.z, tilerect.w), p1, p2, p3);
-    if (a || b || c || d){bool_map[tid][tile.x][tile.y] = 1;}
+    if (a || b || c || d){test = 1;}
     a = lines_intersect(p1, p2, tilerect);
     b = lines_intersect(p2, p3, tilerect);
     c = lines_intersect(p3, p1, tilerect);
     d = lines_intersect(p1, p2, (int4)(tilerect.x,tilerect.w,tilerect.z,tilerect.y));
     e = lines_intersect(p2, p3, (int4)(tilerect.x,tilerect.w,tilerect.z,tilerect.y));
     f = lines_intersect(p3, p1, (int4)(tilerect.x,tilerect.w,tilerect.z,tilerect.y));
-    if (a || b || c || d || e || f){bool_map[tid][tile.x][tile.y] = 1;}
+    if (a || b || c || d || e || f){test = 1;}
+    bool_map[tid][tile.x][tile.y]=test;
 }
 
 __kernel void draw_tris(
@@ -424,16 +444,15 @@ __kernel void draw_tris(
     __constant float4 *points,
     __constant float8 *tex_coords,
     __global const uchar4 *colours,
-    __constant tile_layer *tile_maps,
-    __constant tile_layer tri_counts,
+    __global tile_layer *tile_maps,
+    __global tile_layer tri_counts,
     __global tex_img tex,
     __global scr_img screen)
     {
         ushort2 pos = (ushort2)(get_global_id(0), get_global_id(1));
         ushort2 tile = (ushort2)(get_group_id(0),get_group_id(1));
         int tri_count = tri_counts[tile.x][tile.y];
-        screen[pos.x][pos.y] = (uchar4)(255,255,255
-        ,255);//(tile.x*2.5,tile.y*2.5,255,255));//(uint4)(pos.x,pos.y,convert_int(tris[0].x),255));
+        screen[pos.x][pos.y] = (uchar4)(255,255,255,255);//(tile.x*2.5,tile.y*2.5,255,255));//(uint4)(pos.x,pos.y,convert_int(tris[0].x),255));
         float old_pixel_depth = 100000;
         float test_pixel_depth;
         uchar4 colour;

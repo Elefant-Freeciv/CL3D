@@ -270,12 +270,16 @@ __kernel void count_tiles(__global bool_layer *bool_map, __global tile_layer *tr
 {
     uint2 tile = (uint2)(get_global_id(0), get_global_id(1));
     uint slice = get_global_id(2);
-    tri_count[slice][tile.x][tile.y]=0;
+    //tri_count[slice][tile.x][tile.y]=0;
     int j = 0;
-    int i_max = min((slice+1)*256, tcount);
-    for (int i = slice*256; i<i_max; i++)
+    int i_max = min((slice+1)*slice_size, tcount);
+    for (int i = slice*slice_size; i<i_max; i++)
     {
-        j+=bool_map[i][tile.x][tile.y];
+        //j+=bool_map[i][tile.x][tile.y];
+        if (bool_map[i][tile.x][tile.y]==1)
+        {
+            j++;
+        }
     }
     tri_count[slice][tile.x][tile.y]=j;
 }
@@ -292,9 +296,9 @@ __kernel void make_tiles2(__global bool_layer *bool_map, __global tile_layer *ou
     {
         j += tri_count[q][tile.x][tile.y];
     }
-    i = slice*256;
+    i = slice*slice_size;
     j_max = tri_count[slice][tile.x][tile.y]+j;
-    i_max = min((slice+1)*256, tcount);
+    i_max = min((slice+1)*slice_size, tcount);
     while (j<j_max && i<i_max)
     {
         if (bool_map[i][tile.x][tile.y]==1)
@@ -344,10 +348,10 @@ __kernel void make_tiles_stage_2(__global pre_layer *bool_map, __global preint_l
 {
     uint2 tile = (uint2)(get_global_id(0), get_global_id(1));
     uint slice = get_global_id(2);
-    tri_count[slice][tile.x][tile.y]=0;
+    //tri_count[slice][tile.x][tile.y]=0;
     int j = 0;
-    int i_max = min((slice+1)*256, tcount);
-    for (int i = slice*256; i<i_max; i++)
+    int i_max = min((slice+1)*slice_size, tcount);
+    for (int i = slice*slice_size; i<i_max; i++)
     {
         j+=bool_map[i][tile.x][tile.y];
     }
@@ -367,9 +371,9 @@ __kernel void make_tiles_stage_3(__global uint *sorted_tris, __global pre_layer 
     {
         j += tri_count[q][tile.x][tile.y];
     }
-    i = slice*256;
+    i = slice*slice_size;
     j_max = tri_count[slice][tile.x][tile.y]+j;
-    i_max = min((slice+1)*256, tcount);
+    i_max = min((slice+1)*slice_size, tcount);
     while (j<j_max && i<i_max)
     {
         if (bool_map[i][tile.x][tile.y]==1)

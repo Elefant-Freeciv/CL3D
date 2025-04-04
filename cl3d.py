@@ -66,7 +66,8 @@ class Math3D:
         return matA
 
 class main:
-    def __init__(self, h, w, debug=False, target_tile_size=16):
+    def __init__(self, h, w, debug=False, target_tile_size=16, slice_size=192):
+        self.slice_size = slice_size
         self.debug = debug
         self.h = math.ceil(h/target_tile_size)*target_tile_size
         self.w = math.ceil(w/target_tile_size)*target_tile_size
@@ -81,14 +82,14 @@ class main:
         self.delta = 0.0
         self.clicking = False
         self.start_click = []
-        self.ctx = cl.Context(dev_type=cl.device_type.CPU,
-            properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[1])])
-#         self.ctx = cl.Context(dev_type=cl.device_type.GPU,
-#             properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[0])])
+#         self.ctx = cl.Context(dev_type=cl.device_type.CPU,
+#             properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[1])])
+        self.ctx = cl.Context(dev_type=cl.device_type.GPU,
+            properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[0])])
         self.queue = cl.CommandQueue(self.ctx)
         self.prg = cl.Program(self.ctx,
         f'''
-
+        #define slice_size {self.slice_size}
         #define tilesize (uint2)({self.tilesizey}, {self.tilesizex})
         #define tilecount (uint2)({self.y}, {self.x})
         #define pre_dims (uint2)({self.pre_dims[0]},{self.pre_dims[1]})
@@ -382,7 +383,7 @@ class main:
                            self.cl_screen,
                            self.cl_out).wait()
 
-        slice_count = math.ceil(self.np_tris.shape[0]/256)
+        slice_count = math.ceil(self.np_tris.shape[0]/self.slice_size)
         
         if debug:
             print("slice_count: ", slice_count)
@@ -588,15 +589,15 @@ class main:
             print("step: ", step)#20
             step += 1
         
-        self.cl_tile_layers.release()
-        self.cl_tile_layer.release()
-        self.cl_tile_maps.release()
-        self.cl_out.release()
-        self.cl_model.release()
-        self.cl_view.release()
-        self.cl_points.release()
-        self.dest_buf.release()
-        self.cl_tile_count.release()
+#         self.cl_tile_layers.release()
+#         self.cl_tile_layer.release()
+#         self.cl_tile_maps.release()
+#         self.cl_out.release()
+#         self.cl_model.release()
+#         self.cl_view.release()
+#         self.cl_points.release()
+#         self.dest_buf.release()
+#         self.cl_tile_count.release()
         
         if debug:
             print("step: ", step)#21

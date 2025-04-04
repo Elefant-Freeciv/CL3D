@@ -384,11 +384,20 @@ class main:
 
         slice_count = math.ceil(self.np_tris.shape[0]/256)
         
+        if debug:
+            print("slice_count: ", slice_count)
+        
         self.mapsize = int(self.np_tris.shape[0])
         
         self.cl_tile_maps = cl.Buffer(self.ctx,
                                       mf.READ_WRITE,
                                       (self.y*self.x*self.mapsize))
+        
+        cl.enqueue_fill_buffer(self.queue,
+                               self.cl_tile_maps,
+                               cl.cltypes.uchar(0),
+                               0,
+                               (self.y*self.x*self.mapsize))
         
         self.cl_tile_premaps = cl.Buffer(self.ctx,
                                          mf.READ_WRITE,
@@ -473,7 +482,6 @@ class main:
         
         np_out_l = np.empty((np.sum(np_out2)), dtype=np.int32)
         cl.enqueue_copy(self.queue, np_out_l, self.cl_sorted_tris)
-        null_buffer = cl.Buffer(self.ctx, mf.READ_WRITE, (1024))
         
         if debug:
             print("step: ", step)#12
@@ -491,6 +499,9 @@ class main:
         if debug:
             print("step: ", step)#13
             step += 1
+            np_tile_maps = np.empty((self.mapsize, self.y, self.x), dtype=cl.cltypes.uchar)
+            cl.enqueue_copy(self.queue, np_tile_maps, self.cl_tile_maps)
+            print(np_tile_maps)
         #self.make_tiles1(self.queue, (self.mapsize,), None, self.cl_tris, self.cl_out, self.cl_tile_maps)#, self.cl_tile_layers)
         #self.prg.old_make_tiles1(self.queue, (self.mapsize, self.y, self.x), None, self.cl_tris, self.cl_out, self.cl_tile_maps)
         self.count_tiles(self.queue,
@@ -515,6 +526,23 @@ class main:
             step += 1
         
         np_tile_layer = np.sum(np_out, axis=0, dtype=np.int32)
+        
+#         self.np_offsets2 = np.empty((self.y, self.x), dtype=np.int32)
+#         r_offset2=0
+#         for i in range(self.y):
+#             for j in range(self.x):
+#                 self.np_offsets2[i][j]=r_offset
+#                 r_offset2 += np_tile_layer[i][j]
+#         self.cl_offsets2 = cl.Buffer(self.ctx,
+#                                     mf.READ_ONLY | mf.COPY_HOST_PTR,
+#                                     hostbuf=self.np_offsets2)
+        
+        if debug:
+            print("np_out: ", np_out)
+            print("cl_tile_layer: ", np_tile_layer)
+#             print("np_offsets2: ", self.np_offsets2)
+            
+        
         self.cl_tile_layer = cl.Buffer(self.ctx,
                                        mf.READ_ONLY|mf.COPY_HOST_PTR,
                                        hostbuf=np_tile_layer)
@@ -578,15 +606,17 @@ class main:
         self.cl_view.release()
         self.cl_points.release()
         self.dest_buf.release()
+        self.cl_tile_count.release()
         
         if debug:
             print("step: ", step)#21
             step += 1
-#         self.cl_tile_count.release()
-#         for i in range(self.y):
-#             for j in range(self.x):
-#                 if np_tile_layer[i][j] < 100:
-#                     render_surface.blit(font.render(str(np_tile_layer[i][j]), 1, (0, 0, 0)), (j*self.tilesizex, i*self.tilesizey))
+            for i in range(self.y):
+                for j in range(self.x):
+                    if np_tile_layer[i][j] < 100:
+                        render_surface.blit(font.render(str(np_tile_layer[i][j]), 1, (0, 0, 0)), (j*self.tilesizex, i*self.tilesizey))
+                    else:
+                        render_surface.blit(font.render("XX", 1, (0, 0, 0)), (j*self.tilesizex, i*self.tilesizey))
 #         for i in range(self.pre_dims[0]):
 #             for j in range(self.pre_dims[1]):
 #                 render_surface.blit(font.render(str(np_out2[i][j]), 1, (0, 0, 0)), (j*self.tilesizex*6, i*self.tilesizey*4))

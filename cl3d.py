@@ -502,8 +502,10 @@ class main:
             np_tile_maps = np.empty((self.mapsize, self.y, self.x), dtype=cl.cltypes.uchar)
             cl.enqueue_copy(self.queue, np_tile_maps, self.cl_tile_maps)
             print(np_tile_maps)
+            
         #self.make_tiles1(self.queue, (self.mapsize,), None, self.cl_tris, self.cl_out, self.cl_tile_maps)#, self.cl_tile_layers)
         #self.prg.old_make_tiles1(self.queue, (self.mapsize, self.y, self.x), None, self.cl_tris, self.cl_out, self.cl_tile_maps)
+        
         self.count_tiles(self.queue,
                          (self.y,self.x, slice_count),
                          None,
@@ -527,21 +529,9 @@ class main:
         
         np_tile_layer = np.sum(np_out, axis=0, dtype=np.int32)
         
-#         self.np_offsets2 = np.empty((self.y, self.x), dtype=np.int32)
-#         r_offset2=0
-#         for i in range(self.y):
-#             for j in range(self.x):
-#                 self.np_offsets2[i][j]=r_offset
-#                 r_offset2 += np_tile_layer[i][j]
-#         self.cl_offsets2 = cl.Buffer(self.ctx,
-#                                     mf.READ_ONLY | mf.COPY_HOST_PTR,
-#                                     hostbuf=self.np_offsets2)
-        
         if debug:
             print("np_out: ", np_out)
             print("cl_tile_layer: ", np_tile_layer)
-#             print("np_offsets2: ", self.np_offsets2)
-            
         
         self.cl_tile_layer = cl.Buffer(self.ctx,
                                        mf.READ_ONLY|mf.COPY_HOST_PTR,

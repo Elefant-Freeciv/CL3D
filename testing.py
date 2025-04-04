@@ -7,11 +7,15 @@ h = 350*2
 w = 525*2
 debug = False
 
-#cliloader -h -dv python3 main.py
-#export POCL_LEAVE_KERNEL_COMPILER_TEMP_FILES=1
-#export POCL_EXTRA_BUILD_FLAGS="-g -cl-opt-disable"
-#POCL_DEBUG=all gdb python3 main.py
+'''
+for profiling of kernels
+cliloader -h -dv python3 main.py
 
+for debugging kernels
+export POCL_LEAVE_KERNEL_COMPILER_TEMP_FILES=1
+export POCL_EXTRA_BUILD_FLAGS="-g -cl-opt-disable"
+POCL_DEBUG=all gdb python3 main.py
+'''
 ##pygame.init()
 ##main_screen = pygame.display.set_mode((w, h))
 ##render_surface = pygame.Surface((w, h))

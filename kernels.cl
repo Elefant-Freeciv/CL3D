@@ -70,7 +70,6 @@ float3 barycentric(float2 px, float4 a, float4 b, float4 c)
 float pixel_depth(ushort2 pos, float4 p1, float4 p2, float4 p3)
 {
     float2 px = (float2)(convert_float(pos.x),convert_float(pos.y));
-    //printf("{%f|%f|%f|%f|%f|%f|%f|%f|%f}", p1.x,p1.y,p1.w,p2.x,p2.y,p2.w,p3.x,p3.y,p3.w);
     float3 bary = barycentric(px, p1, p2, p3);
     float z = bary.x * 1/p1.w + bary.y * 1/p2.w + bary.z * 1/p3.w;
     return 1/z;
@@ -341,41 +340,6 @@ __kernel void make_tiles_stage_1(__global const uint4 *tris,
     if (a || b || c || d || e || f){bool_map[gid][tile.x][tile.y] = 1;}
 }
 
-/*__kernel void make_tiles_stage_2(__global pre_layer *bool_map,
-				 __global preint_layer tri_count,
-				 uint tcount)
-{
-    ushort2 tile = (ushort2)(get_global_id(0), get_global_id(1));
-    tri_count[tile.x][tile.y]=0;
-    int j = 0;
-    for (int i = 0; i<(tcount); i++)
-    {
-        if (bool_map[i][tile.x][tile.y]==1)
-        {
-            j++;
-        }
-    }
-    tri_count[tile.x][tile.y]=j;
-}
-
-__kernel void make_tiles_stage_3(__global uint *sorted_tris,
-				 __global pre_layer *bool_map,
-				 __global preint_layer offsets,
-				 uint tcount)
-{
-    int2 tile = (int2)(get_global_id(0),get_global_id(1));
-    int offset = offsets[tile.x][tile.y];
-    int j = 0;
-    for(int i= 0; i<tcount;i++)
-    {
-        if (bool_map[i][tile.x][tile.y]==1)
-        {
-            sorted_tris[offset+j] = i;
-            j++;
-        }
-    }
-}*/
-
 __kernel void make_tiles_stage_2(__global pre_layer *bool_map, __global preint_layer *tri_count, uint tcount)
 {
     uint2 tile = (uint2)(get_global_id(0), get_global_id(1));
@@ -517,5 +481,4 @@ __kernel void draw_tris(
                 }
             }
         }
-        //printf("%i|%i|", tri_count, tri_counts[tile.x][tile.y]);
     }

@@ -486,3 +486,64 @@ __kernel void draw_tris(
             }
         }
     }
+    
+//line by line
+__kernel void make_slices_1(
+    __constant uint4 *tris,
+    __constant float4 *points,
+    __global stack *slices,
+    uint slice_size)
+    {
+        int gid = get_global_id(0);
+        uint4 tri = tris[gid];
+        //float2 tpoints[3] = (float2)(0, points[tri[0]].y),(float2)(1, points[tri[1]].y),(float2)(2, points[tri[2]].y);
+        float max_val = max(points[tri[0]].y, points[tri[1]].y);
+        max_val = max(max_val, points[tri[2]].y);
+        float min_val = min(points[tri[0]].y, points[tri[1]].y);
+        min_val = min(min_val, points[tri[2]].y);
+        for(i=convert_int(min_val)/slice_size; i<convert_int(max_val)/slice_size;i++)
+        {
+            slices[gid][i]=1;
+        }
+    }
+    
+__kernel void make_slices_2(
+    __global stack *slices,
+    __global uint *slice_sizes,
+    uint slice_size
+    )
+    {
+        int gid = get_global_id(0);
+        slice_sizes[gid]=0;
+        int size
+        for(int i=0; i < slice_size; i++)
+        {
+            if(slices[gid][i]==1)
+            {
+                size++;
+            }
+        }
+        slice_sizes[gid]=size;
+    }
+    
+__kernel void make_slices_3(
+    __global stack *slices,
+    __global uint *slice_sizes,
+    __global uint *slice_offsets
+    __global uint *sorted_tris
+    )
+    {
+        int gid = get_global_id(0);
+        int i_max = slice_offsets[gid]+slice_sizes[gid];
+        int i = slice_offsets[gid];
+        int j = 0;
+        while(i<i_max)
+        {
+            if(slices[gid][j])
+            {
+                sorted_tris[i]=j;
+                i++;
+            }
+        j++;
+        }
+    }

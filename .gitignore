@@ -3,3 +3,4 @@
 *.pyc
 __pycache__/cl3d.cpython-311.pyc
 __pycache__/cl3d.cpython-311.pyc
+build_pipe.py

@@ -312,7 +312,8 @@ __kernel void make_tiles2(__global bool_layer *bool_map, __global tile_layer *ou
 
 __kernel void make_tiles_stage_1(__global const uint4 *tris,
                                  __global const float4 *points,
-                                 __global pre_layer *bool_map)
+                                 __global pre_layer *bool_map,
+                                 __global preint_layer *tri_count)
 {
     int gid = get_global_id(0);
     uint4 tri = tris[gid];
@@ -320,7 +321,9 @@ __kernel void make_tiles_stage_1(__global const uint4 *tris,
     float4 p2 = points[tri.y];
     float4 p3 = points[tri.z];
     int2 tile = (int2)(get_global_id(1), get_global_id(2));
+    //tri_count[gid/slice_size][tile.x][tile.y] = 0;
     bool_map[gid][tile.x][tile.y] = 0;
+    bool trigger = 0;
     bool a, b, c, d, e, f; 
     int4 tilerect = (int4)(tile.x*tilesize.x*pre_scale.x, tile.y*tilesize.y*pre_scale.y, tile.x*tilesize.x*pre_scale.x+tilesize.x*pre_scale.x, tile.y*tilesize.y*pre_scale.y+tilesize.y*pre_scale.y);
     a = (p1.x >= tilerect.x && p1.x <= tilerect.z);
@@ -329,19 +332,36 @@ __kernel void make_tiles_stage_1(__global const uint4 *tris,
     d = (p2.y >= tilerect.y && p2.y <= tilerect.w);
     e = (p3.x >= tilerect.x && p3.x <= tilerect.z);
     f = (p3.y >= tilerect.y && p3.y <= tilerect.w);
-    if ((a && b) || (c && d) || (e && f)){bool_map[gid][tile.x][tile.y] = 1;}
+    //trigger = (a && b) || (c && d) || (e && f);
+    //if ((a && b) || (c && d) || (e && f)){bool_map[gid][tile.x][tile.y] = 1;}
+    if ((a && b) || (c && d) || (e && f)){trigger = 1;}
     a = point_in_triangle((ushort2)(tilerect.x, tilerect.y), p1, p2, p3);
     b = point_in_triangle((ushort2)(tilerect.x, tilerect.w), p1, p2, p3);
     c = point_in_triangle((ushort2)(tilerect.z, tilerect.y), p1, p2, p3);
     d = point_in_triangle((ushort2)(tilerect.z, tilerect.w), p1, p2, p3);
-    if (a || b || c || d){bool_map[gid][tile.x][tile.y] = 1;}
+    //trigger = a || b || c || d || trigger;
+    //if (a || b || c || d){bool_map[gid][tile.x][tile.y] = 1;}
+    if (a || b || c || d){trigger = 1;}
     a = lines_intersect(p1, p2, tilerect);
     b = lines_intersect(p2, p3, tilerect);
     c = lines_intersect(p3, p1, tilerect);
     d = lines_intersect(p1, p2, (int4)(tilerect.x,tilerect.w,tilerect.z,tilerect.y));
     e = lines_intersect(p2, p3, (int4)(tilerect.x,tilerect.w,tilerect.z,tilerect.y));
     f = lines_intersect(p3, p1, (int4)(tilerect.x,tilerect.w,tilerect.z,tilerect.y));
-    if (a || b || c || d || e || f){bool_map[gid][tile.x][tile.y] = 1;}
+    //trigger = a || b || c || d || e || f || trigger;
+    //if (a || b || c || d || e || f){bool_map[gid][tile.x][tile.y] = 1;}
+    if (a || b || c || d || e || f){trigger = 1;}
+    barrier(CLK_GLOBAL_MEM_FENCE);
+    bool_map[gid][tile.x][tile.y] = trigger;
+    //printf("{%i,%i,%i,%i}", trigger, gid/slice_size, tile.x, tile.y);
+    //if(trigger){tri_count[gid/slice_size][tile.x][tile.y]++;}
+    //gid = atomic_inc(&tri_count[gid/slice_size][tile.x][tile.y]);
+    if (trigger)
+    {
+        //bool_map[gid][tile.x][tile.y] = 1;
+        gid = atomic_inc(&tri_count[gid/slice_size][tile.x][tile.y]);
+        //printf("{%i,%i,%i,%i}", trigger, gid/slice_size, tile.x, tile.y);
+    }
 }
 
 __kernel void make_tiles_stage_2(__global pre_layer *bool_map, __global preint_layer *tri_count, uint tcount)
@@ -389,7 +409,8 @@ __kernel void make_tiles_stage_4(__global uint *sorted_tris,
                                  __global preint_layer offsets,
                                  __global uint4 *tris,
                                  __global const float4 *points,
-                                 __global bool_layer *bool_map)
+                                 __global bool_layer *bool_map,
+                                 __global tile_layer *tri_count)
 {
     int gid = get_global_id(0);
     int2 gids12 = (int2)(get_global_id(1),get_global_id(2));
@@ -437,6 +458,10 @@ __kernel void make_tiles_stage_4(__global uint *sorted_tris,
     f = lines_intersect(p3, p1, (int4)(tilerect.x,tilerect.w,tilerect.z,tilerect.y));
     if (a || b || c || d || e || f){test = 1;}
     bool_map[tid][tile.x][tile.y]=test;
+    if (test)
+    {
+        offset = atomic_inc(&tri_count[tid/slice_size][tile.x][tile.y]);
+    }
 }
 
 __kernel void draw_tris(
@@ -488,7 +513,7 @@ __kernel void draw_tris(
     }
     
 //line by line
-__kernel void make_slices_1(
+/*__kernel void make_slices_1(
     __constant uint4 *tris,
     __constant float4 *points,
     __global stack *slices,
@@ -546,4 +571,4 @@ __kernel void make_slices_3(
             }
         j++;
         }
-    }
+    }*/

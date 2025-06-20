@@ -404,13 +404,16 @@ class main:
                                          mf.READ_WRITE,
                                          (int(self.y*self.x*self.mapsize/24)))
         
+        np_out = np.zeros((slice_count, self.y, self.x), dtype=np.int32)
         self.cl_tile_count = cl.Buffer(self.ctx,
-                                       mf.READ_WRITE,
-                                       (4*self.y*self.x*slice_count))
+                                       mf.READ_WRITE| mf.COPY_HOST_PTR,
+                                          hostbuf=np_out)
+        
+        np_tile_prelayer1 = np.zeros((slice_count, self.pre_dims[0], self.pre_dims[1]), dtype=np.int32)
         
         self.cl_tile_prelayer = cl.Buffer(self.ctx,
-                                          mf.READ_WRITE,
-                                          int(4*self.y*self.x/24)*slice_count)
+                                          mf.READ_WRITE | mf.COPY_HOST_PTR,
+                                          hostbuf=np_tile_prelayer1)
         
         if debug:
             print("step: ", step)#5
@@ -421,21 +424,11 @@ class main:
                     None,
                     self.cl_tris,
                     self.cl_out,
-                    self.cl_tile_premaps).wait()
+                    self.cl_tile_premaps,
+                    self.cl_tile_prelayer).wait()
         
         if debug:
             print("step: ", step)#6
-            step += 1
-        
-        self.tiles2(self.queue,
-                    (self.pre_dims[0], self.pre_dims[1], slice_count),
-                    None,
-                    self.cl_tile_premaps,
-                    self.cl_tile_prelayer,
-                    cl.cltypes.uint(self.np_tris.shape[0])).wait()
-        
-        if debug:
-            print("step: ", step)#7
             step += 1
         
         np_tile_prelayer = np.empty((slice_count, self.pre_dims[0], self.pre_dims[1]), dtype=np.int32)
@@ -495,30 +488,20 @@ class main:
                     self.cl_offsets,
                     self.cl_tris,
                     self.cl_out,
-                    self.cl_tile_maps).wait()
+                    self.cl_tile_maps,
+                    self.cl_tile_count).wait()
         
         if debug:
             print("step: ", step)#13
             step += 1
             np_tile_maps = np.empty((self.mapsize, self.y, self.x), dtype=cl.cltypes.uchar)
             cl.enqueue_copy(self.queue, np_tile_maps, self.cl_tile_maps)
-            print(np_tile_maps)
             
-        #self.make_tiles1(self.queue, (self.mapsize,), None, self.cl_tris, self.cl_out, self.cl_tile_maps)#, self.cl_tile_layers)
-        #self.prg.old_make_tiles1(self.queue, (self.mapsize, self.y, self.x), None, self.cl_tris, self.cl_out, self.cl_tile_maps)
-        
-        self.count_tiles(self.queue,
-                         (self.y,self.x, slice_count),
-                         None,
-                         self.cl_tile_maps,
-                         self.cl_tile_count,
-                         cl.cltypes.uint(self.np_tris.shape[0])).wait()
         
         if debug:
             print("step: ", step)#14
             step += 1
         
-        np_out = np.empty((slice_count, self.y, self.x), dtype=np.int32)
         cl.enqueue_copy(self.queue, np_out, self.cl_tile_count)
         self.cl_tile_layers = cl.Buffer(self.ctx,
                                         mf.READ_WRITE,
@@ -530,9 +513,10 @@ class main:
         
         np_tile_layer = np.sum(np_out, axis=0, dtype=np.int32)
         
-        if debug:
-            print("np_out: ", np_out)
-            print("cl_tile_layer: ", np_tile_layer)
+        if debug:    
+#             print("np_out: ", np_out)
+#             print("cl_tile_layer: ", np_tile_layer)
+            pass
         
         self.cl_tile_layer = cl.Buffer(self.ctx,
                                        mf.READ_ONLY|mf.COPY_HOST_PTR,
@@ -588,16 +572,6 @@ class main:
         if debug:
             print("step: ", step)#20
             step += 1
-        
-#         self.cl_tile_layers.release()
-#         self.cl_tile_layer.release()
-#         self.cl_tile_maps.release()
-#         self.cl_out.release()
-#         self.cl_model.release()
-#         self.cl_view.release()
-#         self.cl_points.release()
-#         self.dest_buf.release()
-#         self.cl_tile_count.release()
         
         if debug:
             print("step: ", step)#21

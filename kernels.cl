@@ -4,7 +4,7 @@ struct pixel
 {
     ushort2 pos;
     uint tri;
-    float depth;
+    int depth;
     uchar4 colour;
 };
 typedef struct pixel fragment;
@@ -145,40 +145,45 @@ __kernel void vertex(__constant float4 *points,
 
 __kernel void make_boxes(__constant uint4 *tris,
                          __constant float4 *points,
-                         __global box *boxes)
+                         __global box *boxes,
+                         __global uint *offsets)
 {
     int gid = get_global_id(0);
     uint4 tri = tris[gid];
     float4 p1 = points[tri[0]];
     float4 p2 = points[tri[1]];
     float4 p3 = points[tri[2]];
-    float X, Y, x, y;
+    uint X, Y, x, y;
     X = convert_uint_rtp(max(max(p1.x, p2.x), p3.x));
     Y = convert_uint_rtp(max(max(p1.y, p2.y), p3.y));
     x = convert_ushort_rtn(min(min(p1.x, p2.x), p3.x));
     y = convert_ushort_rtn(min(min(p1.y, p2.y), p3.y));
-    uint2 dims = (uint2)(X-x,Y-y);
+    
+    uint2 dims = (uint2)(abs_diff(X,x),abs_diff(Y,y));
     boxes[gid].pos=(ushort2)(x, y);
     boxes[gid].tri=gid;
     boxes[gid].dims=dims;
     boxes[gid].size=dims.x*dims.y;
+    //printf("{%u}", dims.x*dims.y);
+    offsets[gid] = abs(dims.x*dims.y);
+    //printf("{%i, %i, %i, %i, %i, %i, %i}", X,x,Y,y, dims.x, dims.y, dims.x*dims.y);
 }
 /*
 struct pixel
 {
-    uint2 pos;
-    uint tri;
-    float depth;
-    uchar4 colour;
+    uint2 pos; 8
+    uint tri; 4
+    float depth; 4
+    uchar4 colour; 4
 }
 typedef struct pixel fragment;
 
 struct b
 {
-    uint2 pos;
-    uint tri;
-    uint2 dims;
-    uint size;
+    uint2 pos; 8
+    uint tri; 4
+    uint2 dims; 8
+    uint size; 4
 }
 typedef struct b box;*/
 
@@ -190,6 +195,7 @@ __kernel void make_frags(__global box *boxes,
     box l_box = boxes[gid];
     fragment frag;
     uint offset = offsets[l_box.tri];
+    printf("{%i, %i}", l_box.dims.x, l_box.size);
     for(uint i = 0; i<l_box.size; i++)
     {
         frag.pos = l_box.pos + (ushort2)(i%l_box.dims.x, i/l_box.dims.x);
@@ -203,45 +209,35 @@ __kernel void boxes_rasterize(__constant uint4 *tris,
                               __constant float8 *tex_coords,
                               __global const uchar4 *colours,
                               __global tex_img tex,
-                              __global fragment *frags)
+                              __global fragment *frags,
+                              __global dpth_bfr depths)
 {
     int gid = get_global_id(0);
+    int a_res;
     fragment frag = frags[gid];
     uint4 tri = tris[frag.tri];
     float4 p1 = points[tri[0]];
     float4 p2 = points[tri[1]];
     float4 p3 = points[tri[2]];
-    frag.depth = pixel_depth(frag.pos, p1, p2, p3);
+    frag.depth = convert_int(pixel_depth(frag.pos, p1, p2, p3)*10000);
     frag.colour = texture_pixel(frag.pos, frag.tri, frag.depth, tex, tex_coords, p1, p2, p3);
-    for(uint i = 0; i<128; i++)
-    {
-        if(frags[gid].depth > frag.depth)
-        {
-            frags[gid]=frag;
-        }
-        barrier(CLK_GLOBAL_MEM_FENCE);
-    }
+    //printf("struct pixel\n{\n    uint2 pos; (%u, %u)\n    uint tri; (%u)\n    int depth; (%i)\n    uchar4 colour; (%u,%u,%u,%u)\n}", frag.pos.x, frag.pos.y, frag.tri, frag.depth, frag.colour.x, frag.colour.y, frag.colour.z, frag.colour.w);
+    a_res = atomic_min(&depths[clamp((uint)(frag.pos.x), (uint)(0), (uint)(screen_size.x))][clamp((uint)(frag.pos.y), (uint)(0), (uint)(screen_size.y))], frag.depth);
 }
 
 __kernel void draw_screen(__global fragment *frags,
                           __global scr_img screen,
-                          __constant uint *offsets,
-                          __global box *boxes
+                          __global dpth_bfr depths
                           )
 {
-    ushort2 pos = (ushort2)(get_global_id(0), get_global_id(1));
-    box l_box;
-    fragment frag;
-    uint ofst;
-    float depth;
-    for(uint i = 0; i<(sizeof(boxes)/sizeof(box)); i++)
+    int gid = get_global_id(0);
+    fragment frag = frags[gid];
+    screen[10][10]=(uchar4)(0,255,0,255);
+    printf("{%i, %i}", clamp((uint)(frag.pos.x), (uint)(0), (uint)(screen_size.x)), clamp((uint)(frag.pos.y), (uint)(0), (uint)(screen_size.y)));
+    //screen[clamp((uint)(frag.pos.x), (uint)(0), (uint)(screen_size.x))][clamp((uint)(frag.pos.y), (uint)(0), (uint)(screen_size.y))] = (uchar4)(0,255,0,0);
+    if (depths[clamp((uint)(frag.pos.x), (uint)(0), (uint)(screen_size.x))][clamp((uint)(frag.pos.y), (uint)(0), (uint)(screen_size.y))]==frag.depth)
     {
-        l_box = boxes[i];
-        if(pos.x >= l_box.pos.x && pos.y >= l_box.pos.y && pos.x <= l_box.pos.x+l_box.dims.x && pos.y <= l_box.pos.y+l_box.dims.y)
-        {
-            ofst = (pos.x-l_box.pos.x)*(pos.y-l_box.pos.y);
-            frag = frags[offsets[l_box.tri]+ofst];
-        }
+        screen[clamp((uint)(frag.pos.x), (uint)(0), (uint)(screen_size.x))][clamp((uint)(frag.pos.y), (uint)(0), (uint)(screen_size.y))] = (uchar)(255,0,0,128);//frag.colour;
     }
 }
 

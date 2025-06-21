@@ -82,10 +82,10 @@ class main:
         self.delta = 0.0
         self.clicking = False
         self.start_click = []
-#         self.ctx = cl.Context(dev_type=cl.device_type.CPU,
-#             properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[1])])
-        self.ctx = cl.Context(dev_type=cl.device_type.GPU,
-            properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[0])])
+        self.ctx = cl.Context(dev_type=cl.device_type.CPU,
+            properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[1])])
+#         self.ctx = cl.Context(dev_type=cl.device_type.GPU,
+#             properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[0])])
         self.queue = cl.CommandQueue(self.ctx)
         self.prg = cl.Program(self.ctx,
         f'''
@@ -96,12 +96,14 @@ class main:
         #define pre_scale (uint2)(4,6)
         #define XCOUNT {self.tilesizey+1}
         #define YCOUNT {self.tilesizex+1}
+        #define screen_size (uint2)({self.h}, {self.w})
 
         typedef int tile_layer[{self.y}][{self.x}];
         typedef uchar bool_layer[{self.y}][{self.x}];
         typedef uchar pre_layer[{self.pre_dims[0]}][{self.pre_dims[1]}];
         typedef int preint_layer[{self.pre_dims[0]}][{self.pre_dims[1]}];
         typedef uchar4 scr_img[{self.h}][{self.w}];
+        typedef int dpth_bfr[{self.h}][{self.w}];
         typedef uchar4 tex_img[256][1024][1024];
         '''+open("kernels.cl").read()).build()#options=["-cl-fast-relaxed-math","-cl-nv-verbose"])
         
@@ -177,6 +179,10 @@ class main:
         self.tiles2 = self.prg.make_tiles_stage_2
         self.tiles3 = self.prg.make_tiles_stage_3
         self.tiles4 = self.prg.make_tiles_stage_4
+        self.make_frags = self.prg.make_frags
+        self.make_boxes = self.prg.make_boxes
+        self.draw_screen = self.prg.draw_screen
+        self.boxes_rasterize = self.prg.boxes_rasterize
         
         
     def update(self, delta):
@@ -312,8 +318,163 @@ class main:
         rgb[:,:,2] = b * a + (1.0 - a) * B
 
         return np.asarray( rgb, dtype='uint8' )
-        
+    
     def render(self, render_surface, font):
+        self.render_bounds(render_surface, font)
+    
+    def render_bounds(self, render_surface, font):
+        debug = self.debug
+        if debug:
+            step = 0
+            print("step: ", step)#0
+            step += 1
+        np_model = np.eye(4, dtype=np.float32)
+        Math3D.translate(np_model, (1.0, 1.0, 1.0))
+        np_model = Math3D.rotate(np_model, 10.0 * self.rotation[0], (1.0, 0.0, 0.0))
+        np_model = Math3D.rotate(np_model, 10.0 * self.rotation[1], (0.0, 1.0, 0.0))
+        
+        if debug:
+            print("step: ", step)#1
+            step += 1
+        
+        view = np.eye(4, dtype=np.float32)
+        Math3D.translate(view, (-self.viewpos[0], -self.viewpos[1], self.viewpos[2]))
+        
+        if debug:
+            print("step: ", step)#2
+            step += 1
+        
+        right = 12.0
+        top = 8.0
+        far = 100.0
+        near = 0.1
+        
+        if debug:
+            print("step: ", step)#3
+            step += 1
+        
+        orth_proj = np.eye(4, dtype=np.float32)
+        orth_proj[0][0] = 1 / right
+        orth_proj[1][1] = 1 / top
+        orth_proj[2][2] = -2 / (far - near)
+        orth_proj[2][3] = -((far + near) / (far - near))
+        
+        if debug:
+            print("step: ", step)#4
+            step += 1
+        
+        np_view = np.dot(orth_proj, view)
+        np_view = np.dot(np_view, np_model)
+        
+        mf = cl.mem_flags
+        
+        self.cl_points = cl.Buffer(self.ctx,
+                                   mf.READ_WRITE | mf.COPY_HOST_PTR,
+                                   hostbuf=self.np_points)
+        
+        self.cl_view = cl.Buffer(self.ctx,
+                                 mf.READ_ONLY | mf.COPY_HOST_PTR,
+                                 hostbuf=np_view)
+        
+        self.cl_model = cl.Buffer(self.ctx,
+                                  mf.READ_ONLY | mf.COPY_HOST_PTR,
+                                  hostbuf=np_model)
+        
+        self.cl_out = cl.Buffer(self.ctx,
+                                mf.READ_WRITE,
+                                self.np_points.nbytes)
+        
+        self.cl_boxes = cl.Buffer(self.ctx,
+                                  mf.READ_WRITE,
+                                  self.np_tris.shape[0]*24)
+        
+        self.cl_offsets = cl.Buffer(self.ctx,
+                                    mf.READ_WRITE,
+                                    self.np_tris.shape[0]*4)
+        
+        self.cl_depths = cl.Buffer(self.ctx,
+                                   mf.READ_WRITE,
+                                   self.h*self.w*4)
+        
+        self.vertex_shader(self.queue,
+                           (self.np_points.shape[0],),
+                           None,
+                           self.cl_points,
+                           self.cl_view,
+                           self.cl_screen,
+                           self.cl_out).wait()
+        
+        self.make_boxes(self.queue,
+                        (self.np_tris.shape[0],),
+                        None,
+                        self.cl_tris,
+                        self.cl_out,
+                        self.cl_boxes,
+                        self.cl_offsets)
+        
+        self.np_offsets = np.empty(self.np_tris.shape[0], dtype=cl.cltypes.uint)
+        print(self.np_offsets)
+        cl.enqueue_copy(self.queue, self.np_offsets, self.cl_offsets)
+        print(self.np_offsets)
+        offset = 0
+        
+        for i in range(0,self.np_offsets.shape[0]):
+            val = self.np_offsets[i]
+            self.np_offsets[i] = offset
+            offset += val
+        
+        #print(self.np_offsets)    
+        print(offset)
+        
+        self.cl_offsets =  cl.Buffer(self.ctx,
+                                     mf.WRITE_ONLY | mf.COPY_HOST_PTR,
+                                     hostbuf=self.np_offsets)
+        
+        self.cl_frags = cl.Buffer(self.ctx,
+                                  mf.READ_WRITE,
+                                  offset*20)
+            
+        
+        self.make_frags(self.queue,
+                        (self.np_tris.shape[0],),
+                        None,
+                        self.cl_boxes,
+                        self.cl_offsets,
+                        self.cl_frags)
+        
+        self.boxes_rasterize(self.queue,
+                             (offset,),
+                             None,
+                             self.cl_tris,
+                             self.cl_out,
+                             self.tex_coords,
+                             self.cl_colours,
+                             self.tex,
+                             self.cl_frags,
+                             self.cl_depths)
+        
+        self.dest = np.empty((self.h,self.w,4), dtype=cl.cltypes.uchar)
+        self.dest_buf = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.dest)
+        
+        self.draw_screen(self.queue,
+                         (offset,),
+                         None,
+                         self.cl_frags,
+                         self.cl_screen,
+                         self.cl_depths)
+        
+        cl.enqueue_copy(self.queue, self.dest, self.dest_buf)
+        
+        surf = pygame.surfarray.make_surface(self.dest[:,:,:3])
+        surf = pygame.transform.rotate(surf, 90)
+        surf = pygame.transform.flip(surf, False, True)
+        render_surface.blit(surf, (0, 0))
+        verts = font.render(str(len(self.np_points)), 1, (0, 0, 0))
+        render_surface.blit(verts, (0, 30))
+        
+        
+        
+    def render_tiles(self, render_surface, font):
         debug = self.debug
         if debug:
             step = 0

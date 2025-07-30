@@ -304,6 +304,7 @@ __kernel void make_tiles2(__global bool_layer *bool_map, __global tile_layer *ou
         if (bool_map[i][tile.x][tile.y]==1)
         {
             out[j][tile.x][tile.y]=i;
+            //bool_map[i][tile.x][tile.y]=0;
             j++;
         }
         i++;
@@ -321,7 +322,6 @@ __kernel void make_tiles_stage_1(__global const uint4 *tris,
     float4 p2 = points[tri.y];
     float4 p3 = points[tri.z];
     int2 tile = (int2)(get_global_id(1), get_global_id(2));
-    //tri_count[gid/slice_size][tile.x][tile.y] = 0;
     bool_map[gid][tile.x][tile.y] = 0;
     bool trigger = 0;
     bool a, b, c, d, e, f; 
@@ -332,15 +332,11 @@ __kernel void make_tiles_stage_1(__global const uint4 *tris,
     d = (p2.y >= tilerect.y && p2.y <= tilerect.w);
     e = (p3.x >= tilerect.x && p3.x <= tilerect.z);
     f = (p3.y >= tilerect.y && p3.y <= tilerect.w);
-    //trigger = (a && b) || (c && d) || (e && f);
-    //if ((a && b) || (c && d) || (e && f)){bool_map[gid][tile.x][tile.y] = 1;}
     if ((a && b) || (c && d) || (e && f)){trigger = 1;}
     a = point_in_triangle((ushort2)(tilerect.x, tilerect.y), p1, p2, p3);
     b = point_in_triangle((ushort2)(tilerect.x, tilerect.w), p1, p2, p3);
     c = point_in_triangle((ushort2)(tilerect.z, tilerect.y), p1, p2, p3);
     d = point_in_triangle((ushort2)(tilerect.z, tilerect.w), p1, p2, p3);
-    //trigger = a || b || c || d || trigger;
-    //if (a || b || c || d){bool_map[gid][tile.x][tile.y] = 1;}
     if (a || b || c || d){trigger = 1;}
     a = lines_intersect(p1, p2, tilerect);
     b = lines_intersect(p2, p3, tilerect);
@@ -348,19 +344,12 @@ __kernel void make_tiles_stage_1(__global const uint4 *tris,
     d = lines_intersect(p1, p2, (int4)(tilerect.x,tilerect.w,tilerect.z,tilerect.y));
     e = lines_intersect(p2, p3, (int4)(tilerect.x,tilerect.w,tilerect.z,tilerect.y));
     f = lines_intersect(p3, p1, (int4)(tilerect.x,tilerect.w,tilerect.z,tilerect.y));
-    //trigger = a || b || c || d || e || f || trigger;
-    //if (a || b || c || d || e || f){bool_map[gid][tile.x][tile.y] = 1;}
     if (a || b || c || d || e || f){trigger = 1;}
     barrier(CLK_GLOBAL_MEM_FENCE);
     bool_map[gid][tile.x][tile.y] = trigger;
-    //printf("{%i,%i,%i,%i}", trigger, gid/slice_size, tile.x, tile.y);
-    //if(trigger){tri_count[gid/slice_size][tile.x][tile.y]++;}
-    //gid = atomic_inc(&tri_count[gid/slice_size][tile.x][tile.y]);
     if (trigger)
     {
-        //bool_map[gid][tile.x][tile.y] = 1;
         gid = atomic_inc(&tri_count[gid/slice_size][tile.x][tile.y]);
-        //printf("{%i,%i,%i,%i}", trigger, gid/slice_size, tile.x, tile.y);
     }
 }
 
@@ -510,4 +499,15 @@ __kernel void draw_tris(
                 }
             }
         }
+    }
+    
+__kernel void array_sum(__global tile_layer *tri_count, __global tile_layer out, int loop)
+    {
+        int2 tile = (int2)(get_global_id(0), get_global_id(1));
+        int val = 0;
+        for(int i = 0; i < loop; i++)
+        {
+            val = val+tri_count[i][tile.x][tile.y];
+        }
+        out[tile.x][tile.y]=val;
     }

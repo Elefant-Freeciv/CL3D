@@ -82,10 +82,10 @@ class main:
         self.delta = 0.0
         self.clicking = False
         self.start_click = []
-        self.ctx = cl.Context(dev_type=cl.device_type.CPU,
-            properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[1])])
-#         self.ctx = cl.Context(dev_type=cl.device_type.GPU,
-#             properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[0])])
+#         self.ctx = cl.Context(dev_type=cl.device_type.CPU,
+#             properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[1])])
+        self.ctx = cl.Context(dev_type=cl.device_type.GPU,
+            properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[0])])
         self.queue = cl.CommandQueue(self.ctx)
         self.prg = cl.Program(self.ctx,
         f'''
@@ -394,6 +394,7 @@ class main:
                                       mf.READ_WRITE,
                                       (self.y*self.x*self.mapsize))
         
+        
         cl.enqueue_fill_buffer(self.queue,
                                self.cl_tile_maps,
                                cl.cltypes.uchar(0),
@@ -474,9 +475,6 @@ class main:
             print("step: ", step)#11
             step += 1
         
-        np_out_l = np.empty((np.sum(np_out2)), dtype=np.int32)
-        cl.enqueue_copy(self.queue, np_out_l, self.cl_sorted_tris)
-        
         if debug:
             print("step: ", step)#12
             step += 1
@@ -502,16 +500,21 @@ class main:
             print("step: ", step)#14
             step += 1
         
-        cl.enqueue_copy(self.queue, np_out, self.cl_tile_count)
+        self.cl_tcr = cl.Buffer(self.ctx,
+                                mf.READ_WRITE,
+                                (4*np_out.shape[1]*np_out.shape[2]))
+        self.prg.array_sum(self.queue, (np_out.shape[1], np_out.shape[2]), None, self.cl_tile_count, self.cl_tcr, cl.cltypes.int(np_out.shape[0]))
+        np_tile_layer = np_out = np.zeros((self.y, self.x), dtype=np.int32)
+        cl.enqueue_copy(self.queue, np_tile_layer, self.cl_tcr)
         self.cl_tile_layers = cl.Buffer(self.ctx,
                                         mf.READ_WRITE,
-                                        max(4*self.y*self.x*np.sum(np_out, axis=0).max(), 4*self.y*self.x))
+                                        max(4*self.y*self.x*np_tile_layer.max(), 4*self.y*self.x))
 
         if debug:
             print("step: ", step)#15
             step += 1
         
-        np_tile_layer = np.sum(np_out, axis=0, dtype=np.int32)
+        #np_tile_layer = np_tcr
         
         if debug:    
 #             print("np_out: ", np_out)

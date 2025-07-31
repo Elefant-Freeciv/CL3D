@@ -410,6 +410,10 @@ class main:
                                        mf.READ_WRITE| mf.COPY_HOST_PTR,
                                           hostbuf=np_out)
         
+        self.cl_tile_count_summed = cl.Buffer(self.ctx,
+                                       mf.READ_WRITE| mf.COPY_HOST_PTR,
+                                          hostbuf=np_out)
+        
         np_tile_prelayer1 = np.zeros((slice_count, self.pre_dims[0], self.pre_dims[1]), dtype=np.int32)
         
         self.cl_tile_prelayer = cl.Buffer(self.ctx,
@@ -503,7 +507,7 @@ class main:
         self.cl_tcr = cl.Buffer(self.ctx,
                                 mf.READ_WRITE,
                                 (4*np_out.shape[1]*np_out.shape[2]))
-        self.prg.array_sum(self.queue, (np_out.shape[1], np_out.shape[2]), None, self.cl_tile_count, self.cl_tcr, cl.cltypes.int(np_out.shape[0]))
+        self.prg.array_sum(self.queue, (np_out.shape[1], np_out.shape[2]), None, self.cl_tile_count, self.cl_tile_count_summed, self.cl_tcr, cl.cltypes.int(np_out.shape[0]))
         np_tile_layer = np_out = np.zeros((self.y, self.x), dtype=np.int32)
         cl.enqueue_copy(self.queue, np_tile_layer, self.cl_tcr)
         self.cl_tile_layers = cl.Buffer(self.ctx,
@@ -525,6 +529,12 @@ class main:
                                        mf.READ_ONLY|mf.COPY_HOST_PTR,
                                        hostbuf=np_tile_layer)
         
+        self.prg.cumulative_sum(self.queue,
+                                (self.y,self.x),
+                                None,
+                                self.cl_tile_count_summed,
+                                cl.cltypes.uint(slice_count))
+        
         if debug:
             print("step: ", step)#16
             step += 1
@@ -535,6 +545,7 @@ class main:
                          self.cl_tile_maps,
                          self.cl_tile_layers,
                          self.cl_tile_count,
+                         self.cl_tile_count_summed,
                          cl.cltypes.uint(self.np_tris.shape[0])).wait()
         
         if debug:

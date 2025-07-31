@@ -233,7 +233,6 @@ __kernel void old_make_tiles1(
                             __global const uint4 *tris,
                             __global const float4 *points,
                             __global bool_layer *bool_map
-                            //__global tile_layer *tile_layers
                          )
 {
     int gid = get_global_id(0);
@@ -270,12 +269,10 @@ __kernel void count_tiles(__global bool_layer *bool_map, __global tile_layer *tr
 {
     uint2 tile = (uint2)(get_global_id(0), get_global_id(1));
     uint slice = get_global_id(2);
-    //tri_count[slice][tile.x][tile.y]=0;
     int j = 0;
     int i_max = min((slice+1)*slice_size, tcount);
     for (int i = slice*slice_size; i<i_max; i++)
     {
-        //j+=bool_map[i][tile.x][tile.y];
         if (bool_map[i][tile.x][tile.y]==1)
         {
             j++;
@@ -305,12 +302,6 @@ __kernel void make_tiles2(__global bool_layer *bool_map, __global tile_layer *ou
     int i;
     uint j_max;
     uint i_max;
-    /*for(int q = 0; q < slice; q++)
-    {
-        j += tri_count[q][tile.x][tile.y];
-    }
-    if (j != tri_count_summed[slice][tile.x][tile.y])
-    {printf("{%i|%i|%i|%i|%i}", j, tri_count_summed[slice][tile.x][tile.y], slice, tile.x, tile.y);}*/
     i = slice*slice_size;
     j_max = tri_count[slice][tile.x][tile.y]+j;
     i_max = min((slice+1)*slice_size, tcount);
@@ -319,7 +310,6 @@ __kernel void make_tiles2(__global bool_layer *bool_map, __global tile_layer *ou
         if (bool_map[i][tile.x][tile.y]==1)
         {
             out[j][tile.x][tile.y]=i;
-            //bool_map[i][tile.x][tile.y]=0;
             j++;
         }
         i++;

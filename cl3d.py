@@ -518,8 +518,6 @@ class main:
             print("step: ", step)#15
             step += 1
         
-        #np_tile_layer = np_tcr
-        
         if debug:    
 #             print("np_out: ", np_out)
 #             print("cl_tile_layer: ", np_tile_layer)

@@ -319,10 +319,18 @@ __kernel void make_tiles2(__global bool_layer *bool_map, __global tile_layer *ou
 __kernel void make_tiles_stage_1(__global const uint4 *tris,
                                  __global const float4 *points,
                                  __global pre_layer *bool_map,
-                                 __global preint_layer *tri_count)
+                                 __global preint_layer *tri_count,
+                                 uint max_gid,
+                                 __local preint_layer *l_count)
 {
     int gid = get_global_id(0);
+    int lid = get_local_id(0);
+    int group_id = get_group_id(0);
+    if (gid < max_gid) 
+    {
     uint4 tri = tris[gid];
+    if (gid >= max_gid)
+    {printf("{%i|%i}", tri.x, gid);}
     float4 p1 = points[tri.x];
     float4 p2 = points[tri.y];
     float4 p3 = points[tri.z];
@@ -331,6 +339,14 @@ __kernel void make_tiles_stage_1(__global const uint4 *tris,
     bool trigger = 0;
     bool a, b, c, d, e, f; 
     int4 tilerect = (int4)(tile.x*tilesize.x*pre_scale.x, tile.y*tilesize.y*pre_scale.y, tile.x*tilesize.x*pre_scale.x+tilesize.x*pre_scale.x, tile.y*tilesize.y*pre_scale.y+tilesize.y*pre_scale.y);
+    
+    if (lid == 0) 
+    {
+        if(gid/slice_size > 497){printf("{%i|%i|%i|%i|%i}", gid, max_gid, tile.x, tile.y, slice_size);}
+        l_count[group_id][tile.x][tile.y] = 0;
+    }
+    barrier (CLK_LOCAL_MEM_FENCE);
+    
     a = (p1.x >= tilerect.x && p1.x <= tilerect.z);
     b = (p1.y >= tilerect.y && p1.y <= tilerect.w);
     c = (p2.x >= tilerect.x && p2.x <= tilerect.z);
@@ -350,11 +366,17 @@ __kernel void make_tiles_stage_1(__global const uint4 *tris,
     e = lines_intersect(p2, p3, (int4)(tilerect.x,tilerect.w,tilerect.z,tilerect.y));
     f = lines_intersect(p3, p1, (int4)(tilerect.x,tilerect.w,tilerect.z,tilerect.y));
     if (a || b || c || d || e || f){trigger = 1;}
-    barrier(CLK_GLOBAL_MEM_FENCE);
+    //barrier(CLK_GLOBAL_MEM_FENCE);
     bool_map[gid][tile.x][tile.y] = trigger;
     if (trigger)
     {
-        gid = atomic_inc(&tri_count[gid/slice_size][tile.x][tile.y]);
+        gid = atomic_inc(&l_count[group_id][tile.x][tile.y]);
+        //gid = atom_inc(&l_count, 1);
+    }
+    if (lid == 0) 
+    {
+        tri_count[group_id][tile.x][tile.y] = l_count[group_id][tile.x][tile.y];
+    }
     }
 }
 

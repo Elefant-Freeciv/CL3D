@@ -82,10 +82,10 @@ class main:
         self.delta = 0.0
         self.clicking = False
         self.start_click = []
-        self.ctx = cl.Context(dev_type=cl.device_type.CPU,
-            properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[1])])
-#         self.ctx = cl.Context(dev_type=cl.device_type.GPU,
-#             properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[0])])
+#         self.ctx = cl.Context(dev_type=cl.device_type.CPU,
+#             properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[1])])
+        self.ctx = cl.Context(dev_type=cl.device_type.GPU,
+            properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[0])])
         self.queue = cl.CommandQueue(self.ctx)
         self.prg = cl.Program(self.ctx,
         f'''
@@ -103,7 +103,7 @@ class main:
         typedef int preint_layer[{self.pre_dims[0]}][{self.pre_dims[1]}];
         typedef uchar4 scr_img[{self.h}][{self.w}];
         typedef uchar4 tex_img[256][1024][1024];
-        '''+open("kernels.cl").read()).build()
+        '''+open("kernels.cl").read()).build()#options=["-cl-fast-relaxed-math","-cl-nv-verbose"])
         
         mf = cl.mem_flags
 
@@ -424,17 +424,13 @@ class main:
             print("step: ", step)#5
             step += 1
         
-        #self.tiles1.set_arg(4, cl.LocalMemory(slice_count*self.pre_dims[0]*self.pre_dims[1]*4))
-        print(slice_count)
         self.tiles1(self.queue,
-                    (self.slice_size * slice_count, self.pre_dims[0], self.pre_dims[1]),
-                    (self.slice_size, 1, 1),
+                    (self.mapsize, self.pre_dims[0], self.pre_dims[1]),
+                    None,
                     self.cl_tris,
                     self.cl_out,
                     self.cl_tile_premaps,
-                    self.cl_tile_prelayer,
-                    cl.cltypes.uint(self.mapsize),
-                    cl.LocalMemory(slice_count*self.pre_dims[0]*self.pre_dims[1]*4)).wait()
+                    self.cl_tile_prelayer).wait()
         
         if debug:
             print("step: ", step)#6
@@ -442,9 +438,7 @@ class main:
         
         np_tile_prelayer = np.empty((slice_count, self.pre_dims[0], self.pre_dims[1]), dtype=np.int32)
         cl.enqueue_copy(self.queue, np_tile_prelayer, self.cl_tile_prelayer)
-        print(np_tile_prelayer)
         np_out2 = np.sum(np_tile_prelayer, axis=0)
-        print(np_out2)
         
         if debug:
             print("step: ", step)#8

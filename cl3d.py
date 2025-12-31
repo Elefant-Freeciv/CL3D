@@ -84,8 +84,9 @@ class main:
         self.start_click = []
 #         self.ctx = cl.Context(dev_type=cl.device_type.CPU,
 #             properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[1])])
-        self.ctx = cl.Context(dev_type=cl.device_type.GPU,
-            properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[0])])
+#         self.ctx = cl.Context(dev_type=cl.device_type.GPU,
+#             properties=[(cl.context_properties.PLATFORM, cl.get_platforms()[0])])
+        self.ctx = cl.create_some_context()
         self.queue = cl.CommandQueue(self.ctx)
         self.prg = cl.Program(self.ctx,
         f'''
@@ -98,6 +99,7 @@ class main:
         #define YCOUNT {self.tilesizex+1}
 
         typedef int tile_layer[{self.y}][{self.x}];
+        typedef uint tile_map[{self.y}][{self.x}];
         typedef uchar bool_layer[{self.y}][{self.x}];
         typedef uchar pre_layer[{self.pre_dims[0]}][{self.pre_dims[1]}];
         typedef int preint_layer[{self.pre_dims[0]}][{self.pre_dims[1]}];
@@ -392,14 +394,14 @@ class main:
         
         self.cl_tile_maps = cl.Buffer(self.ctx,
                                       mf.READ_WRITE,
-                                      (self.y*self.x*self.mapsize))
+                                      (self.y*self.x*math.ceil(self.mapsize/8)))
         
         
         cl.enqueue_fill_buffer(self.queue,
                                self.cl_tile_maps,
                                cl.cltypes.uchar(0),
                                0,
-                               (self.y*self.x*self.mapsize))
+                               (self.y*self.x*math.ceil(self.mapsize/8)))
         
         self.cl_tile_premaps = cl.Buffer(self.ctx,
                                          mf.READ_WRITE,

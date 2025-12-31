@@ -1,6 +1,33 @@
 //CL//
 
-        
+uint4 get_bool_map_addr(uint3 addr)
+{
+    uint4 rtn;
+    rtn.x = addr.x;
+    rtn.y = addr.y;
+    rtn.z = addr.z / 32;
+    rtn.w = addr.z % 32;
+    return rtn;
+}
+
+bool get_tile_map_val(uint3 addr, __global tile_map *bool_map)
+{
+    uint4 a = get_bool_map_addr(addr);
+    uint v = bool_map[a.z][a.x][a.y];
+    uint mask = 1 << a.w;
+    return (v & mask) >> a.w;
+    
+}
+
+void set_tile_map_val(uint3 addr, __global tile_map *bool_map, bool val)
+{
+    uint4 a = get_bool_map_addr(addr);
+    uint v = bool_map[a.z][a.x][a.y];
+    uint mask = 1 << a.w;
+    uint rtn = v | mask;
+    bool_map[a.z][a.x][a.y] = rtn;
+}
+
         
 float4 mul(__constant float4 mat[4], const float4 point)
 {
@@ -294,7 +321,7 @@ __kernel void cumulative_sum(__global tile_layer *tri_count, uint slices)
     }
 }
 
-__kernel void make_tiles2(__global bool_layer *bool_map, __global tile_layer *out, __global tile_layer *tri_count, __global tile_layer *tri_count_summed, uint tcount)
+__kernel void make_tiles2(__global tile_layer *bool_map, __global tile_layer *out, __global tile_layer *tri_count, __global tile_layer *tri_count_summed, uint tcount)
 {
     uint2 tile = (uint2)(get_global_id(0), get_global_id(1));
     uint slice = get_global_id(2);
@@ -307,7 +334,7 @@ __kernel void make_tiles2(__global bool_layer *bool_map, __global tile_layer *ou
     i_max = min((slice+1)*slice_size, tcount);
     while (j<j_max && i<i_max)
     {
-        if (bool_map[i][tile.x][tile.y]==1)
+        if (get_tile_map_val((uint3)(tile.x, tile.y, i), bool_map)==1)
         {
             out[j][tile.x][tile.y]=i;
             j++;
@@ -403,7 +430,7 @@ __kernel void make_tiles_stage_4(__global uint *sorted_tris,
                                  __global preint_layer offsets,
                                  __global uint4 *tris,
                                  __global const float4 *points,
-                                 __global bool_layer *bool_map,
+                                 __global tile_map *bool_map,
                                  __global tile_layer *tri_count)
 {
     int gid = get_global_id(0);
@@ -451,7 +478,9 @@ __kernel void make_tiles_stage_4(__global uint *sorted_tris,
     e = lines_intersect(p2, p3, (int4)(tilerect.x,tilerect.w,tilerect.z,tilerect.y));
     f = lines_intersect(p3, p1, (int4)(tilerect.x,tilerect.w,tilerect.z,tilerect.y));
     if (a || b || c || d || e || f){test = 1;}
-    bool_map[tid][tile.x][tile.y]=test;
+    set_tile_map_val((uint3)(tile.x, tile.y, tid), bool_map, test);
+    //uint4 addr = get_bool_map_addr((uint3)(tile.x, tile.y, tid));
+    //bool_map[tid][tile.x][tile.y]=test;
     if (test)
     {
         offset = atomic_inc(&tri_count[tid/slice_size][tile.x][tile.y]);

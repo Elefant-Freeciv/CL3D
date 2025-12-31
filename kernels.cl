@@ -19,13 +19,22 @@ bool get_tile_map_val(uint3 addr, __global tile_map *bool_map)
     
 }
 
-void set_tile_map_val(uint3 addr, __global tile_map *bool_map, bool val)
+/*void set_tile_map_val(uint3 addr, __global tile_map *bool_map, bool val)
 {
     uint4 a = get_bool_map_addr(addr);
     uint v = bool_map[a.z][a.x][a.y];
     uint mask = 1 << a.w;
     uint rtn = v | mask;
-    bool_map[a.z][a.x][a.y] = rtn;
+    atomic_xchg(&bool_map[a.z][a.x][a.y], rtn);// = rtn;
+}*/
+
+void set_tile_map_val(uint3 addr, __global tile_map *bool_map, bool val)
+{
+    uint4 a = get_bool_map_addr(addr);
+    //uint v = bool_map[a.z][a.x][a.y];
+    uint mask = val << a.w;
+    //uint rtn = v | mask;
+    atomic_or(&bool_map[a.z][a.x][a.y], mask);
 }
 
         

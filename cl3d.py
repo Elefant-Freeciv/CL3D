@@ -179,6 +179,9 @@ class main:
         self.tiles2 = self.prg.make_tiles_stage_2
         self.tiles3 = self.prg.make_tiles_stage_3
         self.tiles4 = self.prg.make_tiles_stage_4
+        self.array_sum = self.prg.array_sum
+        self.cumulative_sum = self.prg.cumulative_sum
+        self.draw_tris = self.prg.draw_tris
         
         
     def update(self, delta):
@@ -509,7 +512,7 @@ class main:
         self.cl_tcr = cl.Buffer(self.ctx,
                                 mf.READ_WRITE,
                                 (4*np_out.shape[1]*np_out.shape[2]))
-        self.prg.array_sum(self.queue, (np_out.shape[1], np_out.shape[2]), None, self.cl_tile_count, self.cl_tile_count_summed, self.cl_tcr, cl.cltypes.int(np_out.shape[0]))
+        self.array_sum(self.queue, (np_out.shape[1], np_out.shape[2]), None, self.cl_tile_count, self.cl_tile_count_summed, self.cl_tcr, cl.cltypes.int(np_out.shape[0]))
         np_tile_layer = np_out = np.zeros((self.y, self.x), dtype=np.int32)
         cl.enqueue_copy(self.queue, np_tile_layer, self.cl_tcr)
         self.cl_tile_layers = cl.Buffer(self.ctx,
@@ -529,7 +532,7 @@ class main:
                                        mf.READ_ONLY|mf.COPY_HOST_PTR,
                                        hostbuf=np_tile_layer)
         
-        self.prg.cumulative_sum(self.queue,
+        self.cumulative_sum(self.queue,
                                 (self.y,self.x),
                                 None,
                                 self.cl_tile_count_summed,
@@ -554,7 +557,7 @@ class main:
 
         self.dest = np.empty((self.h,self.w,4), dtype=cl.cltypes.uchar)
         self.dest_buf = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.dest)
-        self.prg.draw_tris(self.queue,
+        self.draw_tris(self.queue,
                            (self.h, self.w),
                            (self.tilesizex, self.tilesizey),
                            self.cl_tris,

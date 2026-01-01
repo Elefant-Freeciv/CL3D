@@ -204,8 +204,8 @@ font = pygame.font.SysFont("Arial", 15)
 m = main(h, w, debug)
 clock = pygame.time.Clock()
 fast_enough = True
-profiler = cProfile.Profile()
-profiler.enable()
+# profiler = cProfile.Profile()
+# profiler.enable()
 false = True
 m.make()
 for i in range(10):
@@ -226,9 +226,11 @@ for i in range(10):
             pygame.quit()
             false = False
     m.handle_input(events, pressed_keys, fps_val)
-profiler.disable()
-stats = pstats.Stats(profiler).sort_stats("tottime")
-stats.print_stats()
+# profiler.disable()
+# stats = pstats.Stats(profiler).sort_stats("tottime")
+# stats.print_stats()
+pygame.quit()
+exit()
 sys.exit()
             
             

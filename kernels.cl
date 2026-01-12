@@ -404,15 +404,21 @@ __kernel void make_tiles_stage_1_bb(__global const uint4 *tris,
     float4 p1 = points[tri.x];
     float4 p2 = points[tri.y];
     float4 p3 = points[tri.z];
-    float4 tbb = (float4)(max(max(p1.x,p2.x), p3.x), max(max(p1.y,p2.y), p3.y), min(min(p1.x,p2.x), p3.x), min(min(p1.y,p2.y), p3.y)); 
-    /*
+    int4 tbb = (int4)(min(min(p1.x,p2.x), p3.x)/(tilesize.x*pre_scale.x),
+                          min(min(p1.y,p2.y), p3.y)/(tilesize.y*pre_scale.y), 
+                          max(max(p1.x,p2.x), p3.x)/(tilesize.x*pre_scale.x), 
+                          max(max(p1.y,p2.y), p3.y)/(tilesize.y*pre_scale.y));
+    
+    int ign;
     barrier(CLK_GLOBAL_MEM_FENCE);
-    bool_map[gid][tile.x][tile.y] = trigger;
-    if (trigger)
+    for (int i = tbb.x; i<=tbb.z; i++)
     {
-        gid = atomic_inc(&tri_count[gid/slice_size][tile.x][tile.y]);
+        for (int j = tbb.y; j<=tbb.w; j++)
+        {
+            bool_map[gid][i][j] = 1;
+            ign = atomic_inc(&tri_count[gid/slice_size][i][j]);
+        }
     }
-    */
 }
 
 __kernel void make_tiles_stage_2(__global pre_layer *bool_map, __global preint_layer *tri_count, uint tcount)

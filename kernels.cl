@@ -415,6 +415,7 @@ __kernel void make_tiles_stage_1_bb(__global const uint4 *tris,
     {
         for (int j = tbb.y; j<=tbb.w; j++)
         {
+            barrier(CLK_GLOBAL_MEM_FENCE);
             bool_map[gid][i][j] = 1;
             ign = atomic_inc(&tri_count[gid/slice_size][i][j]);
         }

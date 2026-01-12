@@ -411,9 +411,9 @@ class main:
                                          mf.READ_WRITE,
                                          (int(self.y*self.x*self.mapsize/24)))
         
-#         self.cl_tile_premaps_bb = cl.Buffer(self.ctx,
-#                                          mf.READ_WRITE,
-#                                          (int(self.y*self.x*self.mapsize/24)))
+        self.cl_tile_premaps_bb = cl.Buffer(self.ctx,
+                                         mf.READ_WRITE,
+                                         (int(self.y*self.x*self.mapsize/24)))
         
         np_out = np.zeros((slice_count, self.y, self.x), dtype=np.int32)
         self.cl_tile_count = cl.Buffer(self.ctx,
@@ -430,29 +430,29 @@ class main:
                                           mf.READ_WRITE | mf.COPY_HOST_PTR,
                                           hostbuf=np_tile_prelayer1)
         
-#         self.cl_tile_prelayer_bb = cl.Buffer(self.ctx,
-#                                           mf.READ_WRITE | mf.COPY_HOST_PTR,
-#                                           hostbuf=np_tile_prelayer1)
+        self.cl_tile_prelayer_bb = cl.Buffer(self.ctx,
+                                          mf.READ_WRITE | mf.COPY_HOST_PTR,
+                                          hostbuf=np_tile_prelayer1)
         
         if debug:
             print("step: ", step)#5
             step += 1
         
-#         self.tiles1(self.queue,
-#                     (self.mapsize, self.pre_dims[0], self.pre_dims[1]),
-#                     None,
-#                     self.cl_tris,
-#                     self.cl_out,
-#                     self.cl_tile_premaps,
-#                     self.cl_tile_prelayer).wait()
+        self.tiles1(self.queue,
+                    (self.mapsize, self.pre_dims[0], self.pre_dims[1]),
+                    None,
+                    self.cl_tris,
+                    self.cl_out,
+                    self.cl_tile_premaps,
+                    self.cl_tile_prelayer).wait()
         
         self.tiles1bb(self.queue,
                     (self.mapsize,),
                     None,
                     self.cl_tris,
                     self.cl_out,
-                    self.cl_tile_premaps,
-                    self.cl_tile_prelayer).wait()
+                    self.cl_tile_premaps_bb,
+                    self.cl_tile_prelayer_bb).wait()
         
         if debug:
             print("step: ", step)#6
@@ -462,12 +462,13 @@ class main:
         cl.enqueue_copy(self.queue, np_tile_prelayer, self.cl_tile_prelayer)
         np_out2 = np.sum(np_tile_prelayer, axis=0)
         
-#         np_tile_prelayer_bb = np.empty((slice_count, self.pre_dims[0], self.pre_dims[1]), dtype=np.int32)
-#         cl.enqueue_copy(self.queue, np_tile_prelayer_bb, self.cl_tile_prelayer_bb)
-#         np_out2_bb = np.sum(np_tile_prelayer_bb, axis=0)
+        np_tile_prelayer_bb = np.empty((slice_count, self.pre_dims[0], self.pre_dims[1]), dtype=np.int32)
+        cl.enqueue_copy(self.queue, np_tile_prelayer_bb, self.cl_tile_prelayer_bb)
+        np_out2_bb = np.sum(np_tile_prelayer_bb, axis=0)
         
-#         print(np_out2_bb)
-#         print(np_out2)
+        print(np_out2_bb)
+        print(np_out2)
+        print(np_out2_bb-np_out2)
         
         if debug:
             print("step: ", step)#8

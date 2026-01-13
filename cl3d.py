@@ -169,6 +169,37 @@ class main:
 
         self.cl_screen = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=np_screen)
         self.cl_out = cl.Buffer(self.ctx, mf.WRITE_ONLY, self.np_points.nbytes)
+        self.cl_points = cl.Buffer(self.ctx,
+                                   mf.READ_WRITE | mf.COPY_HOST_PTR,
+                                   hostbuf=self.np_points)
+        
+        self.mapsize = int(self.np_tris.shape[0])
+        
+        self.cl_tile_maps = cl.Buffer(self.ctx,
+                                      mf.READ_WRITE,
+                                      (self.y*self.x*math.ceil(self.mapsize/8)))
+        
+        self.cl_tile_premaps = cl.Buffer(self.ctx,
+                                         mf.READ_WRITE,
+                                         (int(self.y*self.x*self.mapsize/24)))
+        
+        self.cl_tcr = cl.Buffer(self.ctx,
+                                mf.READ_WRITE,
+                                (4*self.y*self.x))
+        
+        slice_count = math.ceil(self.np_tris.shape[0]/self.slice_size)
+        
+        self.cl_tile_count = cl.Buffer(self.ctx,
+                                         mf.READ_WRITE,
+                                         int(self.y*self.x*slice_count*4))
+        
+        self.cl_tile_count_summed = cl.Buffer(self.ctx,
+                                         mf.READ_WRITE,
+                                         int(self.y*self.x*slice_count*4))
+        
+        self.cl_tile_prelayer = cl.Buffer(self.ctx,
+                                         mf.READ_WRITE,
+                                         int(slice_count*self.pre_dims[0]*self.pre_dims[1]*4))
         print(len(vertices))
         
         self.vertex_shader = self.prg.vertex
@@ -297,6 +328,43 @@ class main:
             colours.append(colour)
         self.np_colours = np.array(colours, dtype=cl.cltypes.uchar)
         self.cl_colours = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.np_colours)
+        
+        self.cl_out = cl.Buffer(self.ctx,
+                                mf.READ_WRITE,
+                                self.np_points.nbytes)
+        
+        self.cl_points = cl.Buffer(self.ctx,
+                                   mf.READ_WRITE | mf.COPY_HOST_PTR,
+                                   hostbuf=self.np_points)
+        
+        self.mapsize = int(self.np_tris.shape[0])
+        
+        self.cl_tile_maps = cl.Buffer(self.ctx,
+                                      mf.READ_WRITE,
+                                      (self.y*self.x*math.ceil(self.mapsize/8)))
+        
+        self.cl_tile_premaps = cl.Buffer(self.ctx,
+                                         mf.READ_WRITE,
+                                         (int(self.y*self.x*self.mapsize/24)))
+        
+        self.cl_tcr = cl.Buffer(self.ctx,
+                                mf.READ_WRITE,
+                                (4*self.y*self.x))
+        
+        slice_count = math.ceil(self.np_tris.shape[0]/self.slice_size)
+        
+        self.cl_tile_count = cl.Buffer(self.ctx,
+                                         mf.READ_WRITE,
+                                         int(self.y*self.x*slice_count*4))
+        
+        self.cl_tile_count_summed = cl.Buffer(self.ctx,
+                                         mf.READ_WRITE,
+                                         int(self.y*self.x*slice_count*4))
+        
+        self.cl_tile_prelayer = cl.Buffer(self.ctx,
+                                         mf.READ_WRITE,
+                                         int(slice_count*self.pre_dims[0]*self.pre_dims[1]*4))
+        
 
     def rgba2rgb(self, rgba, background=(0,0,0)):
         row, col, ch = rgba.shape
@@ -365,21 +433,9 @@ class main:
         
         mf = cl.mem_flags
         
-        self.cl_points = cl.Buffer(self.ctx,
-                                   mf.READ_WRITE | mf.COPY_HOST_PTR,
-                                   hostbuf=self.np_points)
-        
         self.cl_view = cl.Buffer(self.ctx,
                                  mf.READ_ONLY | mf.COPY_HOST_PTR,
                                  hostbuf=np_view)
-        
-        self.cl_model = cl.Buffer(self.ctx,
-                                  mf.READ_ONLY | mf.COPY_HOST_PTR,
-                                  hostbuf=np_model)
-        
-        self.cl_out = cl.Buffer(self.ctx,
-                                mf.READ_WRITE,
-                                self.np_points.nbytes)
         
         self.vertex_shader(self.queue,
                            (self.np_points.shape[0],),
@@ -394,12 +450,6 @@ class main:
         if debug:
             print("slice_count: ", slice_count)
         
-        self.mapsize = int(self.np_tris.shape[0])
-        
-        self.cl_tile_maps = cl.Buffer(self.ctx,
-                                      mf.READ_WRITE,
-                                      (self.y*self.x*math.ceil(self.mapsize/8)))
-        
         
         cl.enqueue_fill_buffer(self.queue,
                                self.cl_tile_maps,
@@ -407,52 +457,47 @@ class main:
                                0,
                                (self.y*self.x*math.ceil(self.mapsize/8)))
         
-        self.cl_tile_premaps = cl.Buffer(self.ctx,
-                                         mf.READ_WRITE,
-                                         (int(self.y*self.x*self.mapsize/24)))
         
-        self.cl_tile_premaps_bb = cl.Buffer(self.ctx,
-                                         mf.READ_WRITE,
-                                         (int(self.y*self.x*self.mapsize/24)))
+        cl.enqueue_fill_buffer(self.queue,
+                               self.cl_tile_premaps,
+                               cl.cltypes.uchar(0),
+                               0,
+                               int(self.y*self.x*self.mapsize/24))
+        
         
         np_out = np.zeros((slice_count, self.y, self.x), dtype=np.int32)
-        self.cl_tile_count = cl.Buffer(self.ctx,
-                                       mf.READ_WRITE| mf.COPY_HOST_PTR,
-                                          hostbuf=np_out)
+
         
-        self.cl_tile_count_summed = cl.Buffer(self.ctx,
-                                       mf.READ_WRITE| mf.COPY_HOST_PTR,
-                                          hostbuf=np_out)
+        cl.enqueue_fill_buffer(self.queue,
+                               self.cl_tile_count,
+                               cl.cltypes.int(0),
+                               0,
+                               int(self.y*self.x*slice_count*4))
         
-        np_tile_prelayer1 = np.zeros((slice_count, self.pre_dims[0], self.pre_dims[1]), dtype=np.int32)
+        cl.enqueue_fill_buffer(self.queue,
+                               self.cl_tile_count_summed,
+                               cl.cltypes.int(0),
+                               0,
+                               int(self.y*self.x*slice_count*4))
         
-        self.cl_tile_prelayer = cl.Buffer(self.ctx,
-                                          mf.READ_WRITE | mf.COPY_HOST_PTR,
-                                          hostbuf=np_tile_prelayer1)
+        cl.enqueue_fill_buffer(self.queue,
+                               self.cl_tile_prelayer,
+                               cl.cltypes.int(0),
+                               0,
+                               int(slice_count*self.pre_dims[0]*self.pre_dims[1]*4))
         
-        self.cl_tile_prelayer_bb = cl.Buffer(self.ctx,
-                                          mf.READ_WRITE | mf.COPY_HOST_PTR,
-                                          hostbuf=np_tile_prelayer1)
         
         if debug:
             print("step: ", step)#5
             step += 1
-        
-        self.tiles1(self.queue,
-                    (self.mapsize, self.pre_dims[0], self.pre_dims[1]),
-                    None,
-                    self.cl_tris,
-                    self.cl_out,
-                    self.cl_tile_premaps,
-                    self.cl_tile_prelayer).wait()
         
         self.tiles1bb(self.queue,
                     (self.mapsize,),
                     None,
                     self.cl_tris,
                     self.cl_out,
-                    self.cl_tile_premaps_bb,
-                    self.cl_tile_prelayer_bb).wait()
+                    self.cl_tile_premaps,
+                    self.cl_tile_prelayer).wait()
         
         if debug:
             print("step: ", step)#6
@@ -461,14 +506,6 @@ class main:
         np_tile_prelayer = np.empty((slice_count, self.pre_dims[0], self.pre_dims[1]), dtype=np.int32)
         cl.enqueue_copy(self.queue, np_tile_prelayer, self.cl_tile_prelayer)
         np_out2 = np.sum(np_tile_prelayer, axis=0)
-        
-        np_tile_prelayer_bb = np.empty((slice_count, self.pre_dims[0], self.pre_dims[1]), dtype=np.int32)
-        cl.enqueue_copy(self.queue, np_tile_prelayer_bb, self.cl_tile_prelayer_bb)
-        np_out2_bb = np.sum(np_tile_prelayer_bb, axis=0)
-        
-        print(np_out2_bb)
-        print(np_out2)
-        print(np_out2_bb-np_out2)
         
         if debug:
             print("step: ", step)#8
@@ -534,9 +571,6 @@ class main:
             print("step: ", step)#14
             step += 1
         
-        self.cl_tcr = cl.Buffer(self.ctx,
-                                mf.READ_WRITE,
-                                (4*np_out.shape[1]*np_out.shape[2]))
         self.array_sum(self.queue, (np_out.shape[1], np_out.shape[2]), None, self.cl_tile_count, self.cl_tile_count_summed, self.cl_tcr, cl.cltypes.int(np_out.shape[0]))
         np_tile_layer = np_out = np.zeros((self.y, self.x), dtype=np.int32)
         cl.enqueue_copy(self.queue, np_tile_layer, self.cl_tcr)

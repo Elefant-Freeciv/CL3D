@@ -410,12 +410,10 @@ __kernel void make_tiles_stage_1_bb(__global const uint4 *tris,
                           max(max(p1.y,p2.y), p3.y)/(tilesize.y*pre_scale.y));
     
     int ign;
-    barrier(CLK_GLOBAL_MEM_FENCE);
     for (int i = tbb.x; i<=tbb.z; i++)
     {
         for (int j = tbb.y; j<=tbb.w; j++)
         {
-            barrier(CLK_GLOBAL_MEM_FENCE);
             bool_map[gid][i][j] = 1;
             ign = atomic_inc(&tri_count[gid/slice_size][i][j]);
         }

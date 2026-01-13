@@ -214,6 +214,7 @@ class main:
         self.array_sum = self.prg.array_sum
         self.cumulative_sum = self.prg.cumulative_sum
         self.draw_tris = self.prg.draw_tris
+        self.mts4bb = self.prg.make_tiles_stage_4_bb
         
         
     def update(self, delta):
@@ -386,6 +387,123 @@ class main:
         rgb[:,:,2] = b * a + (1.0 - a) * B
 
         return np.asarray( rgb, dtype='uint8' )
+    
+    def render_bb(self, render_surface, font):
+        debug = self.debug
+        slice_count = math.ceil(self.np_tris.shape[0]/self.slice_size)
+        np_model = np.eye(4, dtype=np.float32)
+        Math3D.translate(np_model, (1.0, 1.0, 1.0))
+        np_model = Math3D.rotate(np_model, 10.0 * self.rotation[0], (1.0, 0.0, 0.0))
+        np_model = Math3D.rotate(np_model, 10.0 * self.rotation[1], (0.0, 1.0, 0.0))
+        
+        view = np.eye(4, dtype=np.float32)
+        Math3D.translate(view, (-self.viewpos[0], -self.viewpos[1], self.viewpos[2]))
+        
+        right = 12.0
+        top = 8.0
+        far = 100.0
+        near = 0.1
+        
+        orth_proj = np.eye(4, dtype=np.float32)
+        orth_proj[0][0] = 1 / right
+        orth_proj[1][1] = 1 / top
+        orth_proj[2][2] = -2 / (far - near)
+        orth_proj[2][3] = -((far + near) / (far - near))
+        
+        np_view = np.dot(orth_proj, view)
+        np_view = np.dot(np_view, np_model)
+        
+        mf = cl.mem_flags
+        
+        self.cl_view = cl.Buffer(self.ctx,
+                                 mf.READ_ONLY | mf.COPY_HOST_PTR,
+                                 hostbuf=np_view)
+        
+        self.vertex_shader(self.queue,
+                           (self.np_points.shape[0],),
+                           None,
+                           self.cl_points,
+                           self.cl_view,
+                           self.cl_screen,
+                           self.cl_out)
+        
+        cl.enqueue_fill_buffer(self.queue,
+                               self.cl_tile_maps,
+                               cl.cltypes.uint(0),
+                               0,
+                               (self.y*self.x*math.ceil(self.mapsize/8)))
+        
+        cl.enqueue_fill_buffer(self.queue,
+                               self.cl_tile_count,
+                               cl.cltypes.int(0),
+                               0,
+                               int(self.y*self.x*slice_count*4))
+        
+        self.mts4bb(self.queue,
+                    (self.mapsize,),
+                    None,
+                    self.cl_tris,
+                    self.cl_out,
+                    self.cl_tile_maps,
+                    self.cl_tile_count)
+        
+        self.array_sum(self.queue, (self.y, self.x), None, self.cl_tile_count, self.cl_tile_count_summed, self.cl_tcr, cl.cltypes.int(slice_count))
+        np_tile_layer = np_out = np.zeros((self.y, self.x), dtype=np.int32)
+        cl.enqueue_copy(self.queue, np_tile_layer, self.cl_tcr)
+        self.cl_tile_layers = cl.Buffer(self.ctx,
+                                        mf.READ_WRITE,
+                                        max(4*self.y*self.x*np_tile_layer.max(), 4*self.y*self.x))
+
+        
+        self.cl_tile_layer = cl.Buffer(self.ctx,
+                                       mf.READ_ONLY|mf.COPY_HOST_PTR,
+                                       hostbuf=np_tile_layer)
+        
+        self.cumulative_sum(self.queue,
+                                (self.y,self.x),
+                                None,
+                                self.cl_tile_count_summed,
+                                cl.cltypes.uint(slice_count))
+        
+        self.make_tiles2(self.queue,
+                         (self.y,self.x, slice_count),
+                         None,
+                         self.cl_tile_maps,
+                         self.cl_tile_layers,
+                         self.cl_tile_count,
+                         self.cl_tile_count_summed,
+                         cl.cltypes.uint(self.np_tris.shape[0]))
+
+        self.dest = np.empty((self.h,self.w,4), dtype=cl.cltypes.uchar)
+        self.dest_buf = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.dest)
+        self.draw_tris(self.queue,
+                           (self.h, self.w),
+                           (self.tilesizex, self.tilesizey),
+                           self.cl_tris,
+                           self.cl_out,
+                           self.tex_coords,
+                           self.cl_colours,
+                           self.cl_tile_layers,
+                           self.cl_tile_layer,
+                           self.tex,
+                           self.dest_buf)
+        
+        cl.enqueue_copy(self.queue, self.dest, self.dest_buf)
+
+        surf = pygame.surfarray.make_surface(self.dest[:,:,:3])
+        surf = pygame.transform.rotate(surf, 90)
+        surf = pygame.transform.flip(surf, False, True)
+        render_surface.blit(surf, (0, 0))
+        verts = font.render(str(len(self.np_points)), 1, (0, 0, 0))
+        render_surface.blit(verts, (0, 30))
+        
+        if debug:
+            for i in range(self.y):
+                for j in range(self.x):
+                    if np_tile_layer[i][j] < 100:
+                        render_surface.blit(font.render(str(np_tile_layer[i][j]), 1, (0, 0, 0)), (j*self.tilesizex, i*self.tilesizey))
+                    else:
+                        render_surface.blit(font.render("XX", 1, (0, 0, 0)), (j*self.tilesizex, i*self.tilesizey))
         
     def render(self, render_surface, font):
         debug = self.debug
@@ -565,3 +683,6 @@ class main:
                         render_surface.blit(font.render(str(np_tile_layer[i][j]), 1, (0, 0, 0)), (j*self.tilesizex, i*self.tilesizey))
                     else:
                         render_surface.blit(font.render("XX", 1, (0, 0, 0)), (j*self.tilesizex, i*self.tilesizey))
+                        
+                        
+    

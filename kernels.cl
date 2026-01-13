@@ -522,6 +522,33 @@ __kernel void make_tiles_stage_4(__global uint *sorted_tris,
     }
 }
 
+__kernel void make_tiles_stage_4_bb(__global const uint4 *tris,
+                                 __global const float4 *points,
+                                 __global tile_map *bool_map,
+                                 __global tile_layer *tri_count)
+{
+    int gid = get_global_id(0);
+    uint4 tri = tris[gid];
+    float4 p1 = points[tri.x];
+    float4 p2 = points[tri.y];
+    float4 p3 = points[tri.z];
+    int4 tbb = (int4)(min(min(p1.x,p2.x), p3.x)/(tilesize.x),
+                          min(min(p1.y,p2.y), p3.y)/(tilesize.y), 
+                          max(max(p1.x,p2.x), p3.x)/(tilesize.x), 
+                          max(max(p1.y,p2.y), p3.y)/(tilesize.y));
+    
+    int ign;
+    for (int i = tbb.x; i<=tbb.z; i++)
+    {
+        for (int j = tbb.y; j<=tbb.w; j++)
+        {
+            //bool_map[gid][i][j] = 1;
+            set_tile_map_val((uint3)(i, j, gid), bool_map, 1);
+            ign = atomic_inc(&tri_count[gid/slice_size][i][j]);
+        }
+    }
+}
+
 __kernel void draw_tris(
     __constant uint4 *tris,
     __constant float4 *points,

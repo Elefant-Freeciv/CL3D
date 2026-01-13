@@ -19,7 +19,7 @@ while r == True:
     fps_val = int(clock.get_fps())
     fps = font.render(str(fps_val), 1, (0, 0, 0))
     render_surface.fill((255, 255, 255))
-    m.render_bb(render_surface, font)
+    m.render(render_surface, font)
     main_screen.blit(render_surface, (0, 0))
     main_screen.blit(fps, (0, 15))
     pygame.display.flip()

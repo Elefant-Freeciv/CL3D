@@ -157,8 +157,8 @@ class main:
                  [0.0, 0.0, 1.0, 1.0],
                  [0.0, 0.0, 0.0, 1.0]]
         np_model = np.array(model, dtype=np.float32)
-        self.src_img1 = Image.open('plane.jpg').convert('RGBA')
-        self.src_img2 = Image.open('plane.jpg').convert('RGBA')
+        self.src_img1 = Image.open('T72_packed_full.png').convert('RGBA').resize((1024,1024))
+        self.src_img2 = Image.open('T72_packed_full.png').convert('RGBA').resize((1024,1024))
         self.src = np.zeros((2,1024,1024,4), dtype=cl.cltypes.uchar)
 
         self.src[0] = np.array(self.src_img1, dtype=cl.cltypes.uchar)
@@ -209,6 +209,7 @@ class main:
         self.cumulative_sum = self.prg.cumulative_sum
         self.draw_tris = self.prg.draw_tris
         self.mts4bb = self.prg.make_tiles_stage_4_bb
+        self.summing = self.prg.summing
         
         
     def update(self, delta):
@@ -253,7 +254,7 @@ class main:
             
     def make(self):
         vertices = []
-        file = open("plane.obj").read().splitlines()
+        file = open("t72.obj").read().splitlines()
         for line in file:
             if line.startswith("v "):
                 l = line.split()
@@ -441,7 +442,15 @@ class main:
                     self.cl_tile_maps,
                     self.cl_tile_count)
         
-        self.array_sum(self.queue, (self.y, self.x), None, self.cl_tile_count, self.cl_tile_count_summed, self.cl_tcr, cl.cltypes.int(slice_count))
+        #self.array_sum(self.queue, (self.y, self.x), None, self.cl_tile_count, self.cl_tile_count_summed, self.cl_tcr, cl.cltypes.int(slice_count))
+        self.summing(self.queue,
+             (self.y, self.x),
+             None,
+             self.cl_tile_count,
+             self.cl_tile_count_summed,
+             self.cl_tcr,
+             cl.cltypes.int(slice_count))
+        
         np_tile_layer = np_out = np.zeros((self.y, self.x), dtype=np.int32)
         cl.enqueue_copy(self.queue, np_tile_layer, self.cl_tcr)
         self.cl_tile_layers = cl.Buffer(self.ctx,
@@ -453,11 +462,11 @@ class main:
                                        mf.READ_ONLY|mf.COPY_HOST_PTR,
                                        hostbuf=np_tile_layer)
         
-        self.cumulative_sum(self.queue,
-                                (self.y,self.x),
-                                None,
-                                self.cl_tile_count_summed,
-                                cl.cltypes.uint(slice_count))
+#         self.cumulative_sum(self.queue,
+#                                 (self.y,self.x),
+#                                 None,
+#                                 self.cl_tile_count_summed,
+#                                 cl.cltypes.uint(slice_count))
         
         self.make_tiles2(self.queue,
                          (self.y,self.x, slice_count),

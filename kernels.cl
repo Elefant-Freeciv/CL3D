@@ -201,6 +201,18 @@ __kernel void count_tiles(__global bool_layer *bool_map, __global tile_layer *tr
     tri_count[slice][tile.x][tile.y]=j;
 }
 
+__kernel void array_sum(__global tile_layer *tri_count, __global tile_layer *tri_count_summed, __global tile_layer out, int loop)
+    {
+        int2 tile = (int2)(get_global_id(0), get_global_id(1));
+        int val = 0;
+        for(int i = 0; i < loop; i++)
+        {
+            val = val+tri_count[i][tile.x][tile.y];
+            tri_count_summed[i][tile.x][tile.y]=tri_count[i][tile.x][tile.y];
+        }
+        out[tile.x][tile.y]=val;
+    }
+
 __kernel void cumulative_sum(__global tile_layer *tri_count, uint slices)
 {
     uint2 tile = (uint2)(get_global_id(0), get_global_id(1));
@@ -212,6 +224,33 @@ __kernel void cumulative_sum(__global tile_layer *tri_count, uint slices)
         tri_count[q][tile.x][tile.y] = j;
         j += temp;
     }
+}
+
+/*__kernel void summing(__global tile_layer *tri_count, __global tile_layer *tri_count_summed, __global tile_layer out, uint slices)
+{
+    uint2 tile = (uint2)(get_global_id(0), get_global_id(1));
+    int j = 0;
+    for(int i = 0; i < slices; i++)
+    {
+        tri_count_summed[i][tile.x][tile.y] = j;
+        j += tri_count[i][tile.x][tile.y];
+    }
+    out[tile.x][tile.y]=j;
+}*/
+__kernel void summing(__global tile_layer *tri_count, __global tile_layer *tri_count_summed, __global tile_layer out, uint slices)
+{
+    uint2 tile = (uint2)(get_global_id(0), get_global_id(1));
+    int j = 0;
+    int temp;
+    int val = 0;
+    for(int i = 0; i < slices; i++)
+    {
+        temp = tri_count[i][tile.x][tile.y];
+        val = val + temp;
+        tri_count_summed[i][tile.x][tile.y] = j;
+        j += temp;
+    }
+    out[tile.x][tile.y] = val;
 }
 
 __kernel void make_tiles2(__global tile_layer *bool_map, __global tile_layer *out, __global tile_layer *tri_count, __global tile_layer *tri_count_summed, uint tcount)
@@ -311,14 +350,4 @@ __kernel void draw_tris(
         }
     }
     
-__kernel void array_sum(__global tile_layer *tri_count, __global tile_layer *tri_count_summed, __global tile_layer out, int loop)
-    {
-        int2 tile = (int2)(get_global_id(0), get_global_id(1));
-        int val = 0;
-        for(int i = 0; i < loop; i++)
-        {
-            val = val+tri_count[i][tile.x][tile.y];
-            tri_count_summed[i][tile.x][tile.y]=tri_count[i][tile.x][tile.y];
-        }
-        out[tile.x][tile.y]=val;
-    }
+

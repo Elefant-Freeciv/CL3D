@@ -204,9 +204,6 @@ class main:
         
         self.vertex_shader = self.prg.vertex
         self.make_tiles2 = self.prg.make_tiles2
-        self.count_tiles = self.prg.count_tiles
-        self.array_sum = self.prg.array_sum
-        self.cumulative_sum = self.prg.cumulative_sum
         self.draw_tris = self.prg.draw_tris
         self.mts4bb = self.prg.make_tiles_stage_4_bb
         self.summing = self.prg.summing
@@ -442,7 +439,6 @@ class main:
                     self.cl_tile_maps,
                     self.cl_tile_count)
         
-        #self.array_sum(self.queue, (self.y, self.x), None, self.cl_tile_count, self.cl_tile_count_summed, self.cl_tcr, cl.cltypes.int(slice_count))
         self.summing(self.queue,
              (self.y, self.x),
              None,
@@ -453,6 +449,7 @@ class main:
         
         np_tile_layer = np_out = np.zeros((self.y, self.x), dtype=np.int32)
         cl.enqueue_copy(self.queue, np_tile_layer, self.cl_tcr)
+        
         self.cl_tile_layers = cl.Buffer(self.ctx,
                                         mf.READ_WRITE,
                                         max(4*self.y*self.x*np_tile_layer.max(), 4*self.y*self.x))
@@ -461,12 +458,6 @@ class main:
         self.cl_tile_layer = cl.Buffer(self.ctx,
                                        mf.READ_ONLY|mf.COPY_HOST_PTR,
                                        hostbuf=np_tile_layer)
-        
-#         self.cumulative_sum(self.queue,
-#                                 (self.y,self.x),
-#                                 None,
-#                                 self.cl_tile_count_summed,
-#                                 cl.cltypes.uint(slice_count))
         
         self.make_tiles2(self.queue,
                          (self.y,self.x, slice_count),

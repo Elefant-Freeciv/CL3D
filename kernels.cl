@@ -137,22 +137,6 @@ uchar4 texture_pixel(ushort2 pos, int i, float z, __global tex_img tex, __consta
     }
 }
 
-__kernel void vertex(__constant float4 *points,
-                     __constant float4 mat[4],
-                     __constant float2 *screen,
-                     __global float4 *out)
-{
-    float4 workvec;
-    int gid = get_global_id(0);
-    //run custom vertex code
-    workvec = mul(mat, points[gid]);
-    workvec.w = -workvec.z;
-    workvec = (float4)(workvec.x / workvec.w, workvec.y / workvec.w, workvec.z / workvec.w, -workvec.z);
-    float x = ((workvec.x + 1) / 2) * screen[0].x;
-    float y = ((-workvec.y + 1) / 2) * screen[0].y;
-    out[gid] = (float4)(y, x, 0, workvec.w);
-}
-
 void bool_map_copy(__global bool_layer out, bool_layer in)
 {
     for (int i = 0; i <= tilecount.x; i++)
@@ -185,72 +169,34 @@ float axis_intersect(bool x_or_y,
     }
 }
 
-__kernel void count_tiles(__global bool_layer *bool_map, __global tile_layer *tri_count, uint tcount)
+__kernel void vertex(__constant float4 *points,
+                     __constant float4 mat[4],
+                     __constant float2 *screen,
+                     __global float4 *out)
 {
-    uint2 tile = (uint2)(get_global_id(0), get_global_id(1));
-    uint slice = get_global_id(2);
-    int j = 0;
-    int i_max = min((slice+1)*slice_size, tcount);
-    for (int i = slice*slice_size; i<i_max; i++)
-    {
-        if (bool_map[i][tile.x][tile.y]==1)
-        {
-            j++;
-        }
-    }
-    tri_count[slice][tile.x][tile.y]=j;
+    float4 workvec;
+    int gid = get_global_id(0);
+    //run custom vertex code
+    workvec = mul(mat, points[gid]);
+    workvec.w = -workvec.z;
+    workvec = (float4)(workvec.x / workvec.w, workvec.y / workvec.w, workvec.z / workvec.w, -workvec.z);
+    float x = ((workvec.x + 1) / 2) * screen[0].x;
+    float y = ((-workvec.y + 1) / 2) * screen[0].y;
+    out[gid] = (float4)(y, x, 0, workvec.w);
 }
 
-__kernel void array_sum(__global tile_layer *tri_count, __global tile_layer *tri_count_summed, __global tile_layer out, int loop)
-    {
-        int2 tile = (int2)(get_global_id(0), get_global_id(1));
-        int val = 0;
-        for(int i = 0; i < loop; i++)
-        {
-            val = val+tri_count[i][tile.x][tile.y];
-            tri_count_summed[i][tile.x][tile.y]=tri_count[i][tile.x][tile.y];
-        }
-        out[tile.x][tile.y]=val;
-    }
-
-__kernel void cumulative_sum(__global tile_layer *tri_count, uint slices)
-{
-    uint2 tile = (uint2)(get_global_id(0), get_global_id(1));
-    int j = 0;
-    int temp;
-    for(int q = 0; q < slices; q++)
-    {
-        temp = tri_count[q][tile.x][tile.y];
-        tri_count[q][tile.x][tile.y] = j;
-        j += temp;
-    }
-}
-
-/*__kernel void summing(__global tile_layer *tri_count, __global tile_layer *tri_count_summed, __global tile_layer out, uint slices)
-{
-    uint2 tile = (uint2)(get_global_id(0), get_global_id(1));
-    int j = 0;
-    for(int i = 0; i < slices; i++)
-    {
-        tri_count_summed[i][tile.x][tile.y] = j;
-        j += tri_count[i][tile.x][tile.y];
-    }
-    out[tile.x][tile.y]=j;
-}*/
 __kernel void summing(__global tile_layer *tri_count, __global tile_layer *tri_count_summed, __global tile_layer out, uint slices)
 {
     uint2 tile = (uint2)(get_global_id(0), get_global_id(1));
     int j = 0;
     int temp;
-    int val = 0;
     for(int i = 0; i < slices; i++)
     {
         temp = tri_count[i][tile.x][tile.y];
-        val = val + temp;
         tri_count_summed[i][tile.x][tile.y] = j;
         j += temp;
     }
-    out[tile.x][tile.y] = val;
+    out[tile.x][tile.y]=j;
 }
 
 __kernel void make_tiles2(__global tile_layer *bool_map, __global tile_layer *out, __global tile_layer *tri_count, __global tile_layer *tri_count_summed, uint tcount)
@@ -349,5 +295,3 @@ __kernel void draw_tris(
             }
         }
     }
-    
-
